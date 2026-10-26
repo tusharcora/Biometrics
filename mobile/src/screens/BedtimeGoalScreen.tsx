@@ -4,8 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchSleepGoal, saveSleepGoal, type SleepGoal } from '../api/sleep';
-import { useCharacter } from '../characters/CharacterContext';
-import { characterInfo } from '../components/characters/registry';
 import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
@@ -13,6 +11,7 @@ import { SegmentedControl } from '../components/ui/segmented-control';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
+import { KIP_NAME } from '../lib/kipCopy';
 import { formatClock } from '../lib/sleepStats';
 import { formatGoalDuration, goalWindowMinutes } from '../lib/sleepWindow';
 import { disableWindDown, enableWindDown, readWindDown, setWindDownLead, type WindDownLead } from '../lib/windDown';
@@ -67,8 +66,8 @@ function changedFields(saved: SleepGoal, draft: Draft): Partial<SleepGoal> {
 export function BedtimeGoalScreen() {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
-  const { characterId } = useCharacter();
-  const coachName = characterInfo(characterId).name;
+  // The wind-down reminder is signed by KIP (spec 2026-10-14 KIP Coach §7.7).
+  const coachName = KIP_NAME;
 
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const [draft, setDraft] = useState<Draft>({ bed: DEFAULT_BEDTIME, wake: DEFAULT_WAKE, sleep: 480, timesTouched: false });

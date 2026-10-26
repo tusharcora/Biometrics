@@ -11,18 +11,16 @@ import { Text } from '../components/ui/text';
 import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
-// A lighter take on Sign in's hero: a small Mochi (signed-out screens always
-// show Mochi), a pixel page title and one muted line above the form.
+// A lighter take on Sign in's hero: a small coral KIP (signed-out screens have
+// no colour of your own yet), a pixel page title and one muted line above the form.
 function AuthHeader({ title, children }: { title: string; children: React.ReactNode }) {
-  const focused = useScreenFocused();
   return (
     <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-      <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
+      <Kip testID="auth-kip" colour="coral" pose="wave" mood="idle" scale={3} />
       <PageTitle className="text-center">{title}</PageTitle>
       <Text className="text-center text-body text-muted-foreground">{children}</Text>
     </Animated.View>

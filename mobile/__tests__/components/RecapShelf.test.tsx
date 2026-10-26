@@ -1,10 +1,10 @@
 import React from 'react';
 import { AppState, StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { fetchRecaps, type RecapSummary } from '../../src/api/recaps';
 import { RecapShelf } from '../../src/components/recap/RecapShelf';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { useRecapShelf } from '../../src/lib/recap/useRecapShelf';
 import { recapTint, STORY_RING_NEUTRAL, storyRingColor } from '../../src/lib/recapTheme';
 import { openRecap, resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
@@ -30,13 +30,14 @@ function Shelf() {
 }
 
 async function show() {
-  render(withCharacter(<Shelf />));
+  render(<Shelf />);
   await act(async () => {});
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   resetUnwatchedRecap();
+  resetMyKipColour();
   mockScheme = 'dark';
   (fetchRecaps as jest.Mock).mockResolvedValue([MONTH, WEEK]);
 });
@@ -55,13 +56,14 @@ it('shows Recaps with See all and a circle per recap, newest first', async () =>
   expect(navigate).toHaveBeenCalledWith('Recaps');
 });
 
-it.each(['dark', 'light'] as const)("rings an unwatched recap in its coach's colour and a watched one in neutral (%s), on the coach's ground", async (scheme) => {
+it.each(['dark', 'light'] as const)("rings an unwatched recap in your KIP's colour and a watched one in neutral (%s), on your KIP's ground whatever the recap's stored personaId", async (scheme) => {
   mockScheme = scheme;
+  setMyKipColour('lime');
   await show();
   const ring = (id: string) => StyleSheet.flatten(screen.getByTestId(`recap-shelf-ring-${id}`).props.style);
-  expect(ring('w-new').borderColor).toBe(storyRingColor('mochi', scheme));
+  expect(ring('w-new').borderColor).toBe(storyRingColor('lime', scheme));
   expect(ring('m-sep').borderColor).toBe(STORY_RING_NEUTRAL[scheme]);
-  expect(StyleSheet.flatten(screen.getByTestId('recap-shelf-circle-m-sep').props.style).backgroundColor).toBe(recapTint('luna').ground);
+  expect(StyleSheet.flatten(screen.getByTestId('recap-shelf-circle-m-sep').props.style).backgroundColor).toBe(recapTint('lime').ground);
   expect(screen.getByTestId('recap-shelf-item-w-new').props.accessibilityLabel).toMatch(/, new$/);
 });
 

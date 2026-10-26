@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, Platform, View } from 'react-native';
 import type { CoachTurnError } from '../../lib/useCoachConversation';
+import { KIP_COPY } from '../../lib/kipCopy';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
@@ -12,6 +13,8 @@ export const ERROR_COPY: Record<CoachTurnError['kind'], string> = {
   busy: "I'm still finishing your last answer. Give it a moment, then try again.",
   // 429 without a Retry-After; with one, errorCopy says when.
   rate_limited: "You've sent a lot of messages in a short time. Try again a little later.",
+  // The request never left the device; never retryable, so no button. The KIP page will show its own offline card.
+  offline: KIP_COPY.offline,
 };
 
 // 'interrupted' when not one event arrived: the answer never started.
@@ -64,7 +67,8 @@ function useWaiting(error: CoachTurnError): boolean {
 }
 
 // A turn that did not finish (spec 6): muted and distinct from an answer, so
-// it is never read as the coach's reply, with Retry when retrying can help.
+// it is never read as KIP's reply, headed "KIP lost the thread" (spec 2026-10-14
+// KIP Coach §3.4), with Retry when retrying can help.
 export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: () => void }) {
   const waiting = useWaiting(error);
   const copy = waitMs(error) > 0 && !waiting ? RATE_LIMIT_OVER : errorCopy(error);
@@ -76,6 +80,7 @@ export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: 
 
   return (
     <View accessibilityRole="alert" className="gap-1 rounded-tile border border-dashed border-border px-3.5 py-3">
+      <Text className="text-caption font-semibold">{KIP_COPY.errorHeading}</Text>
       <Text testID="coach-error" accessibilityLiveRegion="polite" className="text-caption text-muted-foreground">
         {copy}
       </Text>

@@ -155,6 +155,15 @@ describe('runAnswer: a validated, streamed answer', () => {
     expect(sent[10]).toEqual({ role: 'user', content: 'why?' });
   });
 
+  it('labels every telemetry event personaId kip, whatever the stored id', async () => {
+    const { deps, telemetry } = setup([GOOD]);
+    const inp = await input();
+    await prisma.user.update({ where: { id: inp.userId }, data: { coachPersonaId: 'luna' } });
+    await collect(runAnswer(inp, deps));
+    expect(telemetry.events.length).toBeGreaterThan(0);
+    expect(telemetry.events.every((e) => e.personaId === 'kip')).toBe(true);
+  });
+
   it("names an existing conversation's own id on the status event", async () => {
     const { deps } = setup([['First.'], ['Second.']]);
     const inp = await input();
@@ -554,17 +563,17 @@ describe('runAnswer: the user and their persona', () => {
     expect(provider.requests[0]!.system).not.toContain(`Today's date for this user is ${escapeField(utcDate, 10)}.`);
   });
 
-  it("builds the prompt from the user's chosen persona and labels telemetry with it", async () => {
+  it('builds the prompt as KIP whatever id is stored, and labels telemetry kip', async () => {
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'luna' } });
-    const luna = resolvePersona('luna');
+    const kip = resolvePersona('kip');
     const { deps, provider, telemetry } = setup([['Fine.']]);
     await collect(runAnswer({ userId: user.id, message: 'How am I doing today?', history: [] }, deps));
     const system = provider.requests[0]!.system;
-    expect(system).toContain(`- name: ${escapeField(luna.name, 60)}`);
-    expect(system).toContain(`- coaching focus: ${escapeField(luna.focus)}`);
+    expect(system).toContain(`- name: ${escapeField(kip.name, 60)}`);
+    expect(system).toContain(`- coaching focus: ${escapeField(kip.focus)}`);
     expect(telemetry.events.length).toBeGreaterThan(0);
-    expect(telemetry.events.every((e) => e.personaId === 'luna')).toBe(true);
+    expect(telemetry.events.every((e) => e.personaId === 'kip')).toBe(true);
   });
 });
 

@@ -1,17 +1,17 @@
 import React, { memo } from 'react';
 import { View } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import type { AnswerCardDTO, CoachMessageSource } from '../../api/coach';
 import type { CoachChatMessage } from '../../lib/useCoachConversation';
 import { followUpsFor } from '../../lib/coachAnswers';
-import { cn } from '../../lib/utils';
+import { kipLabelColour } from '../../lib/colour';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { KIP_COPY } from '../../lib/kipCopy';
 import { Text } from '../ui/text';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { ChatBubble } from '../ui/chat-bubble';
-import { StreamingText } from '../ui/streaming-text';
-import { useCharacterOptional } from '../../characters/CharacterContext';
-import { characterInfo } from '../characters/registry';
-import { ReplyFrame, isReplyFrameStyle, replyFrameTextClass, replyFrameTextStyle } from './thinking/ReplyFrame';
+import { KipHead } from '../kip/KipHead';
 import { MemoryProposalChips } from '../memory-proposal-chips';
 import { AnswerCard } from './AnswerCard';
 import { FollowUpChips } from './FollowUpChips';
@@ -31,8 +31,8 @@ interface CoachMessageRowProps {
   onOpenSource: (card: AnswerCardDTO) => void;
 }
 
-// One message on the Coach page: a question, or an answer with its card,
-// "Stopped" marker, on-device note, memory chips and follow-ups (spec 1.3).
+// One message on the KIP page: a question, or an answer headed by KIP's head and a "KIP" label (spec 2026-10-14
+// KIP Coach §3.4, §7.7) with its card, "Stopped" marker, on-device note, memory chips and follow-ups (spec 1.3).
 export const CoachMessageRow = memo(function CoachMessageRow({
   message,
   showFollowUps,
@@ -42,7 +42,8 @@ export const CoachMessageRow = memo(function CoachMessageRow({
   onOverrideSafety,
   onOpenSource,
 }: CoachMessageRowProps) {
-  const characterCtx = useCharacterOptional();
+  const mine = useMyKipColour();
+  const { colorScheme } = useColorScheme();
   if (message.role === 'user') {
     return (
       <View className="gap-1">
@@ -58,17 +59,17 @@ export const CoachMessageRow = memo(function CoachMessageRow({
   // The empty answer being waited on shows as the thinking line instead.
   if (message.state === 'streaming' && !message.text && !message.safety) return null;
   const { card, safety } = message;
-  // The answer still streaming in, under a thinking text whose frame it flows
-  // into (B, I). Once done it renders as a normal message, like all history.
-  const thinkingText = characterCtx?.thinkingText;
-  const frame = message.state === 'streaming' && !safety && isReplyFrameStyle(thinkingText) ? thinkingText : null;
+  // KIP's colour where it reads on the dark card; otherwise the foreground.
+  const labelColour = kipLabelColour(mine, colorScheme);
   return (
     <View className="gap-2">
-      {message.text && frame ? (
-        <ReplyFrame style={frame} characterId={characterInfo(characterCtx?.characterId).id}>
-          <StreamingText text={message.text} animate={false} className={cn('text-body', replyFrameTextClass(frame))} style={replyFrameTextStyle(frame)} />
-        </ReplyFrame>
-      ) : message.text ? (
+      <View className="flex-row items-center gap-1.5">
+        <KipHead testID={`coach-reply-kip-${message.id}`} />
+        <Text className={labelColour ? 'text-caption font-semibold' : 'text-caption font-semibold text-foreground'} style={labelColour ? { color: labelColour } : undefined}>
+          {KIP_COPY.replyLabel}
+        </Text>
+      </View>
+      {message.text ? (
         <ChatBubble role="assistant" text={message.text} source={message.source as CoachMessageSource} animate={false}>
           {safety ? (
             <View className="gap-3">

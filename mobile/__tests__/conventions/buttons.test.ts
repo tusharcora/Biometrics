@@ -50,6 +50,7 @@ const ALLOWED: Exception[] = [
   { file: 'components/chats/NewChatSheet.tsx', key: 'new-chat-${row.id}', count: 1, reason: 'a buddy row in the new-message picker' },
   { file: 'screens/BadgesScreen.tsx', key: 'badges-row-${family}', count: 1, reason: 'a badge family row that opens its detail' },
   { file: 'screens/CoachScreen.tsx', key: 'coach-suggestion-${index}', count: 1, reason: 'a suggested-question row in the empty chat' },
+  { file: 'components/coach/CollapsedKipHeader.tsx', key: 'kip-room-thumbnail', count: 1, reason: 'the collapsed header\'s room thumbnail: a picture you tap to expand the room (spec §3.5)' },
   { file: 'components/coach/PromptBar.tsx', key: 'coach-command-${command.key}', count: 1, reason: 'a row of the slash-command menu' },
   { file: 'components/sleep/BedtimeGoalRow.tsx', key: 'sleep-goal-row', count: 1, reason: 'the bedtime goal row on the Sleep page (a card that navigates)' },
   // Cards and tiles that navigate
@@ -58,9 +59,8 @@ const ALLOWED: Exception[] = [
   { file: 'screens/RecapScreen.tsx', key: 'recap-story-preview', count: 1, reason: 'the story preview card that opens the story viewer' },
   { file: 'screens/MetricsScreen.tsx', key: 'trend-card-${type}', count: 1, reason: 'a metric trend card that opens its detail' },
   { file: 'screens/MetricsScreen.tsx', key: 'patterns-button', count: 1, reason: 'the Patterns card' },
-  { file: 'screens/MeetYourCoachScreen.tsx', key: 'meet-tile-${id}', count: 1, reason: 'a coach tile in the picker grid' },
   { file: 'components/coach-digest-card.tsx', key: 'coach-digest-card', count: 1, reason: 'the digest card that opens the coach' },
-  { file: 'components/home/HomeScene.tsx', key: 'HotTag:testID', count: 1, reason: 'a hot tag on the Home scene (SLEEP, TMRW, RECOVERY, RECAPS) that opens its page' },
+  { file: 'components/home/HotTag.tsx', key: 'HotTag:testID', count: 1, reason: "Home F's hot tag, on the scene and on the KIP page's room card (a tag, not a button in the design sense)" },
   { file: 'components/home/HomeScene.tsx', key: 'home-buddy-${b.id}', count: 1, reason: "a buddy's name tag on the Home scene that opens their week" },
   { file: 'components/home/HomeScene.tsx', key: 'home-scene-all', count: 1, reason: 'the scene\'s "ALL n →" tag that opens Social' },
   { file: 'components/home/TodayTiles.tsx', key: 'TodayTile:testID', count: 1, reason: 'a Home Today tile (Recovery, Sleep, Tomorrow) that opens its page' },
@@ -99,7 +99,7 @@ const ALLOWED: Exception[] = [
   { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-prev', count: 1, reason: 'the left story tap zone' },
   { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-next', count: 1, reason: 'the right story tap zone' },
   // The documented custom exception
-  { file: 'components/coach/AskCoachBar.tsx', key: 'ask-coach-button', count: 1, reason: 'Ask {coach}, a GlassSurface CTA with the character (the one documented custom CTA)' },
+  { file: 'components/coach/AskKipBar.tsx', key: 'ask-kip-button', count: 1, reason: 'Ask KIP, a GlassSurface CTA with KIP\'s head (the one documented custom CTA)' },
 ];
 
 type Found = { file: string; line: number; tag: string; key: string };

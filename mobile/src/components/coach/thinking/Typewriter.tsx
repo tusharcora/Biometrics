@@ -1,8 +1,8 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Text } from '../../ui/text';
-import { CHARACTERS } from '../../characters/registry';
-import { useCoachVoice, useElapsed } from './shared';
+import { KIP_THINKING_VERBS } from '../../../lib/kipCopy';
+import { useElapsed, useKipVoice } from './shared';
 import type { ThinkingStyleProps } from './types';
 
 const CYCLE_MS = 4200;
@@ -16,13 +16,13 @@ export function typedLength(full: string, phase: number): number {
   return Math.max(0, full.length - Math.floor((phase - HOLD_UNTIL_MS) / ERASE_MS));
 }
 
-// D: "Kit is judging your bedtime..." types out at 45 ms a letter, holds,
+// D: "KIP is typing it up..." types out at 45 ms a letter, holds,
 // erases at 20 ms a letter, then the next line. One clock drives it all.
 // Frozen (Reduce Motion, out of focus) it shows the whole first line.
-export function Typewriter({ characterId, paused }: ThinkingStyleProps) {
-  const { name, text, accent } = useCoachVoice(characterId);
+export function Typewriter({ paused }: ThinkingStyleProps) {
+  const { name, text, accent } = useKipVoice();
   const elapsed = useElapsed(paused);
-  const lines = CHARACTERS[characterId].thinkingLines;
+  const lines = KIP_THINKING_VERBS;
   const full = `${name} is ${lines[Math.floor(elapsed / CYCLE_MS) % lines.length]}…`;
   const shown = paused ? full : full.slice(0, typedLength(full, elapsed % CYCLE_MS));
   const caretOn = Math.floor(elapsed / 500) % 2 === 0;

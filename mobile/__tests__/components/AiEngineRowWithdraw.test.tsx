@@ -97,7 +97,7 @@ describe('AiEngineRow: Claude withdrawn by the server', () => {
 
     fireEvent.press(getByTestId('ai-engine-hosted'));
 
-    expect(await findByTestId('ai-engine-unavailable')).toHaveTextContent(/isn't available/);
+    expect(await findByTestId('ai-engine-unavailable')).toHaveTextContent("Claude isn't available on this server right now. KIP answers on-device.");
     expect(getByTestId('ai-engine-hosted').props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
     expect(onChange).not.toHaveBeenCalled();
     expect(onChooseHosted).not.toHaveBeenCalled();

@@ -1,5 +1,5 @@
 // Test helpers for screens that stream coach answers. Kept out of __tests__ so
-// jest does not collect it as a suite (like characterContext.tsx). Each test
+// jest does not collect it as a suite (like coachStatus.tsx). Each test
 // file mocks ../src/api/coachStream itself and passes the mocked function in.
 import { act } from '@testing-library/react-native';
 import type { CoachStreamEvent, SendCoachMessageInput } from '../src/api/coach';

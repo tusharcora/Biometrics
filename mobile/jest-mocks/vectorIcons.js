@@ -5,8 +5,8 @@
 // finish synchronously. This draws a plain, synchronous View that keeps the
 // icon's name for any test that wants to look at it. Not global: snapshot tests
 // (e.g. CorrelationCard) record the real icon's output.
-// Lives in its own file for the same NativeWind/babel-plugin-jest-hoist reason
-// as jest-mocks/CharacterCanvas.js.
+// Lives in its own file because an inline factory trips babel-plugin-jest-hoist
+// under NativeWind's Babel transform.
 const React = require('react');
 const { View } = require('react-native');
 

@@ -1,32 +1,34 @@
-import { contrast } from '../../src/components/characters/palette';
-import { CHARACTERS } from '../../src/components/characters/registry';
-import { CHARACTER_IDS } from '../../src/components/characters/types';
+import { contrast } from '../../src/lib/colour';
+import { KIP_COLOURS, type KipColour } from '../../src/lib/kip/kipArt';
 import { CHANGE_COLORS, changeColor, recapTint, STORY_RING_NEUTRAL, storyRingColor, yearCell, YEAR_SCALE } from '../../src/lib/recapTheme';
 import { COLORS } from '../../src/theme';
 
-it("tints each image with its coach's ground and accent from the registry (Luna navy + yellow, Mochi plum + pink)", () => {
-  expect(recapTint('luna')).toMatchObject({ ground: '#12132A', accent: '#FEF08A' });
-  expect(recapTint('mochi')).toMatchObject({ ground: '#2A1420', accent: '#F9A8D4' });
+const KIP_IDS = Object.keys(KIP_COLOURS) as KipColour[];
+
+it("tints each image with your KIP's colour on a dark ground of it (coral, lemon)", () => {
+  expect(recapTint('coral')).toMatchObject({ ground: '#311B21', accent: '#FB7185' });
+  expect(recapTint('lemon')).toMatchObject({ ground: '#312D17', accent: '#FDE047' });
 });
 
-it.each(CHARACTER_IDS)('keeps every text colour readable on the %s ground', (id) => {
+it.each(KIP_IDS)('keeps every text colour readable on the %s ground', (id) => {
   const t = recapTint(id);
-  expect(t.ground).toBe(CHARACTERS[id].ground);
+  expect(t.ground).toMatch(/^#[0-9A-F]{6}$/);
   expect(contrast(t.text, t.ground)).toBeGreaterThanOrEqual(12);
   expect(contrast(t.soft, t.ground)).toBeGreaterThanOrEqual(7);
   expect(contrast(t.muted, t.ground)).toBeGreaterThanOrEqual(4.5);
-  // The accent is lightened only when it would not read (Cap's red, Pengu's steel).
+  // The accent is lightened only when it would not read (cobalt, ink, slate).
   expect(contrast(t.accentText, t.ground)).toBeGreaterThanOrEqual(4.5);
   expect(t.dot).toMatch(/^#[0-9A-F]{8}$/i);
 });
 
-it.each(CHARACTER_IDS)("reads the story's See full recap button (ground label on an accent fill) for %s", (id) => {
+it.each(KIP_IDS)("reads the story's See full recap button (ground label on an accentText fill) for %s", (id) => {
   const t = recapTint(id);
-  expect(contrast(t.ground, t.accent)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(t.ground, t.accentText)).toBeGreaterThanOrEqual(4.5);
 });
 
 it('changes the accent only when it must', () => {
-  expect(recapTint('luna').accentText).toBe('#FEF08A');
+  expect(recapTint('lemon').accentText).toBe('#FDE047');
+  expect(recapTint('ink').accentText).not.toBe(KIP_COLOURS.ink);
 });
 
 it('has a three-step purple sleep scale for the year and green / orange change colours', () => {
@@ -45,7 +47,7 @@ it("colours an in-app change: the design's green and orange on dark, text-safe d
   }
 });
 
-it.each(CHARACTER_IDS)('keeps every year cell readable on the %s ground: no data an outlined empty cell, future a faint fill', (id) => {
+it.each(KIP_IDS)('keeps every year cell readable on the %s ground: no data an outlined empty cell, future a faint fill', (id) => {
   const t = recapTint(id);
   const none = yearCell('none', t);
   const future = yearCell('future', t);
@@ -69,12 +71,12 @@ describe('story ring (an unwatched recap on the avatar, the tab bar and the shel
   // The app's page backgrounds and card (tab bar) surfaces, as hex.
   const SURFACES = { light: ['#F6F6F7', '#FFFFFF'], dark: ['#0A0B0E', '#14161B'] } as const;
 
-  it("is the recap coach's own accent in dark mode", () => {
-    expect(storyRingColor('mochi', 'dark')).toBe('#F9A8D4');
-    expect(storyRingColor('luna', 'dark')).toBe('#FEF08A');
+  it("is your KIP's own colour in dark mode", () => {
+    expect(storyRingColor('coral', 'dark')).toBe('#FB7185');
+    expect(storyRingColor('lemon', 'dark')).toBe('#FDE047');
   });
 
-  it.each(CHARACTER_IDS)('stands out (3:1, non-text) on every surface in light and dark for %s', (id) => {
+  it.each(KIP_IDS)('stands out (3:1, non-text) on every surface in light and dark for %s', (id) => {
     for (const scheme of ['light', 'dark'] as const) {
       const ring = storyRingColor(id, scheme);
       expect(ring).toMatch(/^#[0-9A-F]{6}$/i);
@@ -82,9 +84,9 @@ describe('story ring (an unwatched recap on the avatar, the tab bar and the shel
     }
   });
 
-  it("darkens a pale accent in light mode but keeps the coach's hue (Luna's yellow)", () => {
-    const ring = storyRingColor('luna', 'light');
-    expect(ring).not.toBe('#FEF08A');
+  it("darkens a pale colour in light mode but keeps its hue (lemon)", () => {
+    const ring = storyRingColor('lemon', 'light');
+    expect(ring).not.toBe('#FDE047');
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(ring.slice(i, i + 2), 16));
     expect(r!).toBeGreaterThan(b!);
     expect(g!).toBeGreaterThan(b!);

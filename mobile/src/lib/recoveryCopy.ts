@@ -213,8 +213,8 @@ export const RECOVERY_COPY = {
   loadError: "Couldn't load your recovery.",
   futureError: "That day hasn't happened yet.",
   tryAgain: 'Try again',
-  askToday: (coach: string) => `Ask ${coach} about today`,
-  askPast: (coach: string) => `Ask ${coach} about this day`,
+  askToday: 'Ask KIP about today',
+  askPast: 'Ask KIP about this day',
   noReading: 'No reading',
   // BUILDING with no cold-start progress to count down from.
   buildingLine: 'Your forecast is charging up',

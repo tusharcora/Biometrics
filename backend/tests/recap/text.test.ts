@@ -14,7 +14,7 @@ const GOOD_STORY = 'You hit your goal on 5 nights this week. Recovery averaged 7
 
 function input(kind: 'WEEK' | 'MONTH', over: Partial<RecapTextInput> = {}): RecapTextInput {
   const stats = kind === 'WEEK' ? WEEK_STATS : MONTH_STATS;
-  return { userId: 'u1', kind, stats, sheet: buildRecapFactSheet(kind, stats, 480), persona: resolvePersona('luna'), periodLabel: 'September 2026', aiAllowed: true, ...over };
+  return { userId: 'u1', kind, stats, sheet: buildRecapFactSheet(kind, stats, 480), persona: resolvePersona('kip'), periodLabel: 'September 2026', aiAllowed: true, ...over };
 }
 function deps(script: StreamStep[], clock = new FakeClock()) {
   const provider = new ScriptedStreamProvider(script);
@@ -22,7 +22,7 @@ function deps(script: StreamStep[], clock = new FakeClock()) {
 }
 
 describe('recap prompts', () => {
-  const luna = resolvePersona('luna');
+  const kip = resolvePersona('kip');
   const changed: RecapPromptContext = {
     kind: 'WEEK',
     periodLabel: 'the week of Sep 28',
@@ -30,7 +30,7 @@ describe('recap prompts', () => {
   };
 
   it('tell the coach to write every number as digits, scores as N/100 and counts with their noun right after', () => {
-    for (const prompt of [buildRecapLinePrompt(luna, changed), buildRecapStoryPrompt(luna, changed)]) {
+    for (const prompt of [buildRecapLinePrompt(kip, changed), buildRecapStoryPrompt(kip, changed)]) {
       expect(prompt).toMatch(/every number as digits/i);
       expect(prompt).toMatch(/no number words/i);
       expect(prompt).toMatch(/no ordinals \(not "fifth"/i);
@@ -40,22 +40,22 @@ describe('recap prompts', () => {
   });
 
   it('state the direction of every comparison in words, with its sign', () => {
-    for (const prompt of [buildRecapLinePrompt(luna, changed), buildRecapStoryPrompt(luna, changed)]) {
+    for (const prompt of [buildRecapLinePrompt(kip, changed), buildRecapStoryPrompt(kip, changed)]) {
       expect(prompt).toContain('- Average sleep compared with last week: went UP (a positive change): 28m more than last week.');
       expect(prompt).toContain('- Average recovery compared with last week: went DOWN (a negative change): 5 points lower than last week.');
       expect(prompt).toContain('- Bedtime spread compared with last week: did not change: bedtimes varied the same as last week.');
       expect(prompt).toMatch(/keep that direction exactly/i);
     }
-    const noComparison = buildRecapStoryPrompt(luna, { ...changed, sheet: buildRecapFactSheet('WEEK', WEEK_STATS, 480) });
+    const noComparison = buildRecapStoryPrompt(kip, { ...changed, sheet: buildRecapFactSheet('WEEK', WEEK_STATS, 480) });
     expect(noComparison).not.toContain('went UP');
     expect(noComparison).not.toContain('Changes since last');
   });
 
   it("set the story's length from the persona verbosity, clamped to 3-5 sentences; the line stays 1-2 sentences", () => {
-    expect(buildRecapStoryPrompt({ ...luna, verbosity: 'terse' }, changed)).toContain('Write 3 sentences in one paragraph.');
-    expect(buildRecapStoryPrompt({ ...luna, verbosity: 'normal' }, changed)).toContain('Write 3 to 4 sentences in one paragraph.');
-    expect(buildRecapStoryPrompt({ ...luna, verbosity: 'detailed' }, changed)).toContain('Write 4 to 5 sentences in one paragraph.');
-    const line = buildRecapLinePrompt({ ...luna, verbosity: 'detailed' }, changed);
+    expect(buildRecapStoryPrompt({ ...kip, verbosity: 'terse' }, changed)).toContain('Write 3 sentences in one paragraph.');
+    expect(buildRecapStoryPrompt({ ...kip, verbosity: 'normal' }, changed)).toContain('Write 3 to 4 sentences in one paragraph.');
+    expect(buildRecapStoryPrompt({ ...kip, verbosity: 'detailed' }, changed)).toContain('Write 4 to 5 sentences in one paragraph.');
+    const line = buildRecapLinePrompt({ ...kip, verbosity: 'detailed' }, changed);
     expect(line).toContain('1 or 2 sentences, at most 30 words');
     expect(line).not.toContain('4 to 5 sentences');
   });
@@ -79,7 +79,7 @@ describe('writeRecapText', () => {
     const t = deps([GOOD_LINE]);
     expect(await writeRecapText(input('MONTH'), t.deps)).toEqual({ line: GOOD_LINE, lineSource: 'AI', story: null, storySource: null });
     const system = t.provider.requests[0]!.system;
-    expect(system).toContain('Luna');
+    expect(system).toContain('KIP');
     expect(system).toContain('/100');
     expect(system).toContain('[sleep.streak]');
     expect(system).toMatch(/keep that direction exactly/i);

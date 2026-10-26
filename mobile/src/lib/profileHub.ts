@@ -48,9 +48,8 @@ export interface HubInput {
   health: { connected: boolean; lastSyncedAt: string | null };
   buddiesAvailable: boolean;
   chatsAvailable: boolean;
-  coach: { name: string; style: string; text: string };
-  /** The AI Coach card shows only while the coach is enabled. */
-  aiCoach: { enabled: boolean; consented: boolean } | null;
+  /** The KIP card: the thinking text's name, and whether coaching is on (null while the coach is disabled or unknown). */
+  kip: { thinking: string; consented: boolean | null };
   now: Date;
   kipColour: KipColour;
 }
@@ -74,8 +73,7 @@ export function categoryCards(i: HubInput): CategoryCard[] {
     cards.push({ category: 'buddies', status: r.identity && sharing !== null ? S.buddies(r.identity.handle, sharing, SHARE_KEYS.length) : null });
   }
   if (i.chatsAvailable) cards.push({ category: 'chats', status: r.chats ? S.chats(r.chats) : null });
-  cards.push({ category: 'coach', status: S.coach(i.coach.name, i.coach.style, i.coach.text) });
-  if (i.aiCoach?.enabled) cards.push({ category: 'aiCoach', status: S.aiCoach(i.aiCoach.consented) });
+  cards.push({ category: 'kip', status: S.kip(kipColourName(i.kipColour), i.kip.thinking, i.kip.consented) });
   cards.push({ category: 'signIn', status: r.providers && r.devices !== null ? S.signIn(r.providers, r.devices) : null });
   return cards;
 }

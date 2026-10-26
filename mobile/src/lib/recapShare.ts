@@ -1,5 +1,4 @@
 import type { RecapStats } from '../api/recaps';
-import { isCharacterId, type CharacterId } from '../components/characters/types';
 
 // The shareable images (spec 2026-10-04 §3): formats, what each can include, and the export
 // geometry. Pure, so the builder and its tests share one source.
@@ -27,8 +26,8 @@ export const INCLUDE_LABELS: Record<IncludeKey, string> = {
   bestRecovery: 'Best recovery',
   steps: 'Steps',
   bestNight: 'Best night',
-  quote: 'A line from your coach',
-  coach: 'Coach character',
+  quote: 'A line from KIP',
+  coach: 'Your KIP',
   count: 'Nights on goal',
   badges: 'Badges this week',
 };
@@ -76,16 +75,7 @@ export function exportLayout(format: ShareFormat, pixelRatio: number): { width: 
   return { width, height: DESIGN_HEIGHT[format] * scale, scale };
 }
 
-/**
- * The coach on the monthly card and weekly story: the recap's own, since its line was written in
- * that voice; the current coach when the recap has none we know (ruling S6). Year in pixels has no
- * line and always shows the current coach.
- */
-export function recapCoachId(recap: { personaId: string | null }, current: CharacterId): CharacterId {
-  return isCharacterId(recap.personaId) ? recap.personaId : current;
-}
-
-// The coach's quote never truncates on an image: it is sized to its box from an estimate of its
+// KIP's quote never truncates on an image: it is sized to its box from an estimate of its
 // wrapped lines, and the Text keeps adjustsFontSizeToFit as a net for when the estimate is short.
 /** Line height of the drawn quote (Geist), as a multiple of its font size. */
 export const QUOTE_LINE_HEIGHT = 1.4;

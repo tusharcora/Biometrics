@@ -1,11 +1,12 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { listConversations } from '../../src/api/coach';
+import { listCoachMemory, listConversations } from '../../src/api/coach';
 import { ConversationsSheet, relativeDay } from '../../src/components/coach/ConversationsSheet';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
   listConversations: jest.fn(),
+  listCoachMemory: jest.fn(),
 }));
 
 const list = listConversations as jest.Mock;
@@ -31,6 +32,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof Conversation
 
 beforeEach(() => {
   list.mockReset();
+  (listCoachMemory as jest.Mock).mockReset().mockResolvedValue([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }]);
 });
 
 describe('relativeDay', () => {
@@ -51,6 +53,24 @@ describe('relativeDay', () => {
 });
 
 describe('ConversationsSheet', () => {
+  it("names KIP's memory with the count", async () => {
+    list.mockResolvedValue(conversations);
+    const s = renderSheet();
+    expect(await s.findByText('What KIP remembers')).toBeTruthy();
+    expect(await s.findByText('See, edit or delete · 3 things')).toBeTruthy();
+    expect(s.getByTestId('conversations-memory').props.accessibilityLabel).toBe('What KIP remembers, See, edit or delete, 3 things');
+    expect(s.getByTestId('conversations-memory-kip', { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  it('names the memory without a count when it cannot be read', async () => {
+    list.mockResolvedValue(conversations);
+    (listCoachMemory as jest.Mock).mockRejectedValue(new Error('offline'));
+    const s = renderSheet();
+    await s.findByTestId('conversation-c2');
+    expect(s.getByText('What KIP remembers')).toBeTruthy();
+    expect(s.queryByText(/See, edit or delete/)).toBeNull();
+  });
+
   it('lists past conversations by their first question, with a relative date', async () => {
     list.mockResolvedValue(conversations);
     const { findByTestId, getByTestId } = renderSheet();

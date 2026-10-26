@@ -3,7 +3,7 @@ import type { SleepNight } from '../../src/api/sleep';
 import { READY } from '../../jest-mocks/forecastFixture';
 import {
   ART, at, clampTagLeft, flowerSpots, forecastRange, ICON, isNightTime, isShortNight, kipBox, layGround, layObjects,
-  layRain, laySky, layWeather, nextSceneBoundary, pxPaths, sceneBackdrop, sceneExtra, sceneOffsetX, sceneState,
+  layRain, laySky, layWeather, nextSceneBoundary, pxPaths, sceneBackdrop, sceneExtra, sceneMoodForWeather, sceneOffsetX, sceneState,
   SCENE_SPOTS, skyAt, STATES, todayScore, todayWeather, type SceneKey,
 } from '../../src/lib/home/scene';
 import { weatherFor, weatherForScore } from '../../src/lib/recoveryCopy';
@@ -217,5 +217,16 @@ describe('layout', () => {
   it('puts "ALL n →" on its own row below the name tags, inside the ground', () => {
     expect(SCENE_SPOTS.all).toEqual({ right: 382, top: 278 });
     expect(SCENE_SPOTS.all.top).toBeGreaterThanOrEqual(SCENE_SPOTS.nameTop + 14 + 8);
+  });
+});
+
+describe('sceneMoodForWeather', () => {
+  it("gives Recovery the day's mood, the same as Home's scene for that weather", () => {
+    expect(sceneMoodForWeather('clear')).toBe('proud');
+    expect(sceneMoodForWeather('mostlyClear')).toBe('idle');
+    expect(sceneMoodForWeather('cloudy')).toBe('idle');
+    expect(sceneMoodForWeather('stormy')).toBe('determined');
+    expect(sceneMoodForWeather('building')).toBe('curious');
+    expect(sceneMoodForWeather('none')).toBe('curious');
   });
 });

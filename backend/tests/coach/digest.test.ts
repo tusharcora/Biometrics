@@ -58,7 +58,7 @@ const GOOD_DIGEST = 'Your recovery averaged 70 across the last 7 days. That is a
 const GOOD_TEXT = GOOD_DIGEST;
 const FALLBACK_TEXT = "Here's your week. Recovery averaged 70 over the last 7 days.";
 
-/** A consented user (default persona: mochi, threshold-triggered) with 7 days of recovery + sleep scores. */
+/** A consented user (default persona: kip, threshold-triggered) with 7 days of recovery + sleep scores. */
 async function digestUser(opts: { persona?: string | null; consent?: boolean; scores?: boolean } = {}) {
   const user = await createUser();
   if (opts.persona !== undefined) await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: opts.persona } });
@@ -152,8 +152,8 @@ describe('gating', () => {
   // any later persona set, so it is exercised through a stubbed persona.
   it("skips a 'reactive-only' persona", async () => {
     const user = await digestUser();
-    const mochi = personas.resolvePersona('mochi');
-    jest.spyOn(personas, 'resolvePersona').mockReturnValue({ ...mochi, proactivity: 'reactive-only' });
+    const kip = personas.resolvePersona('kip');
+    jest.spyOn(personas, 'resolvePersona').mockReturnValue({ ...kip, proactivity: 'reactive-only' });
     const { deps, provider, pushSender, telemetry } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
@@ -205,9 +205,9 @@ describe('companion characters', () => {
     },
   );
 
-  // Ruling R6: a legacy v1 id or a retired character id is unknown, so the recap comes from the default coach.
-  it.each(['encouraging', 'direct', 'clinical', 'hoot', 'pip', 'beep'])(
-    'a user with the unknown stored id %s (not yet migrated) gets a recap from the default coach, mochi',
+  // v5: a legacy v1 id or any retired character id resolves to KIP, so the recap comes from KIP.
+  it.each(['encouraging', 'direct', 'clinical', 'hoot', 'pip', 'beep', 'mochi', 'luna'])(
+    'a user with the old stored id %s (not yet migrated) gets a recap from KIP',
     async (stored) => {
       const user = await digestUser({ persona: stored });
       const { deps } = setup([GOOD_DIGEST]);
@@ -215,7 +215,7 @@ describe('companion characters', () => {
       const summary = await sweep(deps, user.id);
 
       expect(summary.generated).toBe(1);
-      expect((await digestsOf(user.id))[0]!.personaId).toBe('mochi');
+      expect((await digestsOf(user.id))[0]!.personaId).toBe('kip');
     },
   );
 });
@@ -231,7 +231,7 @@ describe('generation (trends fact sheet, validated like replies)', () => {
     const [row] = await digestsOf(user.id);
     expect(row!.text).toBe(GOOD_TEXT);
     expect(row!.text).not.toMatch(/medical assessment/);
-    expect(row!.personaId).toBe('mochi');
+    expect(row!.personaId).toBe('kip');
     expect(row!.weekStart.toISOString().slice(0, 10)).toBe(weekStartOf(todayUtc()));
 
     expect(provider.callCount).toBe(1);
@@ -566,6 +566,6 @@ describe('sweep robustness and telemetry', () => {
     const serialized = JSON.stringify(telemetry.events);
     expect(serialized).not.toContain('averaged');
     expect(serialized).not.toContain('bedtime');
-    expect(telemetry.events.every((e) => e.userId === user.id && e.personaId === 'mochi')).toBe(true);
+    expect(telemetry.events.every((e) => e.userId === user.id && e.personaId === 'kip')).toBe(true);
   });
 });

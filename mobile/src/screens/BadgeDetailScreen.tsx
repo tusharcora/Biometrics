@@ -3,9 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
-import { useCharacterOptional } from '../characters/CharacterContext';
 import { BadgeIcon } from '../components/achievements/BadgeIcon';
-import { characterInfo } from '../components/characters/registry';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { PageTitle } from '../components/ui/page-title';
@@ -15,6 +13,7 @@ import { Text } from '../components/ui/text';
 import { refreshAchievements, useAchievements } from '../lib/achievementsStore';
 import { tierTextColor } from '../lib/badgeArt';
 import { FAMILY_NAMES, FAMILY_RULES, countLabel, ladderRow, numeral, tierName } from '../lib/badges';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -28,7 +27,7 @@ export function BadgeDetailScreen() {
   // A malformed deep link or a stale state restore may arrive without params: the missing state.
   const family = (useRoute<BadgeDetailRoute>().params as BadgeDetailRoute['params'] | undefined)?.family;
   const { state } = useAchievements();
-  const accent = characterInfo(useCharacterOptional()?.characterId).accent;
+  const mine = useMyKipColour();
   const dark = useColorScheme().colorScheme === 'dark';
   useRefreshAchievementsOnFocus();
 
@@ -92,7 +91,7 @@ export function BadgeDetailScreen() {
                   <Text testID={`badge-detail-level-${level}-sub`} className="text-caption text-muted-foreground">{row.text}</Text>
                 </View>
                 {row.tag ? (
-                  <Text testID={`badge-detail-level-${level}-tag`} className="text-label" style={{ color: tierTextColor(level, accent, dark) }}>
+                  <Text testID={`badge-detail-level-${level}-tag`} className="text-label" style={{ color: tierTextColor(level, mine, dark) }}>
                     {row.tag}
                   </Text>
                 ) : null}

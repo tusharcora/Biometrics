@@ -49,18 +49,38 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   return res.json() as Promise<T>;
 }
 
+// Offline detection without NetInfo (spec §3.4, owner 2026-10-14): fetch itself rejected, before any response.
+// Tagged where it happens so nothing downstream (an AbortError from Stop, a parse error, an ApiError) can pass for it.
+const NETWORK = Symbol.for('biometrics.network');
+
+export function markNetworkError<E>(err: E): E {
+  if (err && typeof err === 'object') (err as Record<symbol, unknown>)[NETWORK] = true;
+  return err;
+}
+
+export function isNetworkError(err: unknown): boolean {
+  if (!err || typeof err !== 'object' || (err as { name?: unknown }).name === 'AbortError') return false;
+  return (err as Record<symbol, unknown>)[NETWORK] === true;
+}
+
 // The authenticated request under apiFetch, returning the Response itself so
 // a caller can read the body as a stream. `fetchImpl` lets the coach stream
 // use expo/fetch, whose body is a real ReadableStream on iOS and Android.
 export async function apiResponse(path: string, options: RequestInit = {}, fetchImpl: typeof fetch = fetch): Promise<Response> {
   const cookie = await authClient.getCookie();
-  const res = await fetchImpl(`${baseUrl}${path}`, {
-    ...options,
-    // The session travels as an explicit Cookie header from SecureStore; the
-    // platform cookie jar must not add or override anything.
-    credentials: 'omit',
-    headers: { ...options.headers, Cookie: cookie },
-  });
+  let res: Response;
+  try {
+    res = await fetchImpl(`${baseUrl}${path}`, {
+      ...options,
+      // The session travels as an explicit Cookie header from SecureStore; the
+      // platform cookie jar must not add or override anything.
+      credentials: 'omit',
+      headers: { ...options.headers, Cookie: cookie },
+    });
+  } catch (err) {
+    // An abort is the caller's own Stop, never "offline".
+    throw (err as { name?: unknown } | null)?.name === 'AbortError' ? err : markNetworkError(err);
+  }
   if (res.status === 401) {
     // Sessions slide on the server and there is no refresh step: a 401 means
     // the session is gone (revoked, expired, account deleted). Sign out -- which

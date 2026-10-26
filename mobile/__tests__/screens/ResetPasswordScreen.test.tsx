@@ -1,5 +1,6 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ResetPasswordScreen } from '../../src/screens/ResetPasswordScreen';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -52,9 +53,11 @@ it('picks up a fresh token that arrives on an already-open reset screen', async 
   await waitFor(() => expect(resetPassword).toHaveBeenCalledWith('fresh', 'new password 1'));
 });
 
-it('always shows Mochi, whatever character a provider holds (signed-out screens)', () => {
+it('always shows a coral KIP waving, whatever colour a KIP was last given (signed-out screens)', () => {
+  setMyKipColour('lime');
   (useAuth as jest.Mock).mockReturnValue({ resetPassword: jest.fn() });
-  const utils = render(withCharacter(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />, { characterId: 'kit' }));
+  const utils = render(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />);
 
-  expect(characterLabel(utils, 'auth-character')).toBe('character:mochi:idle:56:playing:none');
+  expect(kipFills(utils, 'auth-kip')).toEqual(kipArtFills({ colour: 'coral', pose: 'wave', mood: 'idle' }));
+  resetMyKipColour();
 });

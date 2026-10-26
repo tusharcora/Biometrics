@@ -3,6 +3,7 @@ import { v1Personas } from './v1';
 import { LEGACY_PERSONA_IDS, v2Personas } from './v2';
 import { v3Personas } from './v3';
 import { v4Personas } from './v4';
+import { v5Personas } from './v5';
 
 export type { CoachPersona, CharacterPersona, PersonaSet, Verbosity, Proactivity } from './types';
 export { REQUIRED_DISALLOWED_TOPICS } from './types';
@@ -14,9 +15,10 @@ export const PERSONA_SETS: Record<string, PersonaSet> = {
   [v2Personas.version]: v2Personas,
   [v3Personas.version]: v3Personas,
   [v4Personas.version]: v4Personas,
+  [v5Personas.version]: v5Personas,
 };
 
-export const LIVE_PERSONA_VERSION = 'v4';
+export const LIVE_PERSONA_VERSION = 'v5';
 
 function liveSet(): PersonaSet {
   return PERSONA_SETS[LIVE_PERSONA_VERSION]!;
@@ -28,33 +30,22 @@ export function listPersonas(): CoachPersona[] {
   return liveSet().personas;
 }
 
-/**
- * A retired v1 id becomes the character that replaced it; anything else is
- * returned as is. Own keys only, so "toString" or "__proto__" never match.
- */
-export function canonicalPersonaId(id: string): string {
-  return Object.hasOwn(LEGACY_PERSONA_IDS, id) ? LEGACY_PERSONA_IDS[id as keyof typeof LEGACY_PERSONA_IDS] : id;
+// Every id any registered set ever had, plus the v1 → v2 legacy keys: an old app's request never fails (§2).
+const KNOWN_IDS: ReadonlySet<string> = new Set([
+  ...Object.values(PERSONA_SETS).flatMap((set) => set.personas.map((p) => p.id)),
+  ...Object.keys(LEGACY_PERSONA_IDS),
+]);
+
+export function isKnownPersonaId(id: unknown): boolean {
+  return typeof id === 'string' && KNOWN_IDS.has(id);
 }
 
+/** The live persona for any id the app ever stored or sent; undefined for anything else. */
 export function findPersona(id: unknown): CoachPersona | undefined {
-  if (typeof id !== 'string') return undefined;
-  const canonical = canonicalPersonaId(id);
-  return listPersonas().find((p) => p.id === canonical);
+  return isKnownPersonaId(id) ? liveSet().personas[0] : undefined;
 }
 
-/**
- * The v3 characters v4 retired (hoot, pip, nimbus, …): v3's ids minus the live ones. Old builds still
- * offer them, and their Skip sends 'hoot' (ruling R23). v1 ids (encouraging, …) are not in it.
- */
-export const RETIRED_CHARACTER_IDS: ReadonlySet<string> = new Set(
-  PERSONA_SETS.v3!.personas.map((p) => p.id).filter((id) => !listPersonas().some((p) => p.id === id)),
-);
-
-export function isRetiredCharacterId(id: unknown): boolean {
-  return typeof id === 'string' && RETIRED_CHARACTER_IDS.has(id);
-}
-
-/** A stored id that no longer exists (persona retired in a later version) falls back to the default. */
+/** Any stored id, known or not (or none), resolves to the live persona: in v5, KIP. */
 export function resolvePersona(id: string | null | undefined): CoachPersona {
   return findPersona(id) ?? findPersona(DEFAULT_PERSONA_ID)!;
 }

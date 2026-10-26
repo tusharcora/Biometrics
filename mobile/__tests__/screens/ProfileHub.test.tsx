@@ -72,8 +72,10 @@ it('shows the category cards with their status, and each opens its section', asy
   expect(screen.getByTestId('profile-category-signIn')).toBeTruthy();
   fireEvent.press(screen.getByTestId('profile-category-timezone'));
   expect(navigate).toHaveBeenCalledWith('ProfileSection', { section: 'timezone' });
-  fireEvent.press(screen.getByTestId('profile-category-coach'));
-  expect(navigate).toHaveBeenCalledWith('ProfileSection', { section: 'coach' });
+  fireEvent.press(screen.getByTestId('profile-category-kip'));
+  expect(navigate).toHaveBeenCalledWith('ProfileSection', { section: 'kip' });
+  // The KIP card's status is spoken with commas, not middle dots.
+  expect(screen.getByTestId('profile-category-kip').props.accessibilityLabel).toBe('KIP. Coral, Steps');
 });
 
 it('ends with Delete account and the note on what deleting removes', async () => {

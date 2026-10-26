@@ -6,9 +6,11 @@ import { openRecap } from '../../src/lib/unwatchedRecap';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { FloatingTabBar } from '../../src/navigation/FloatingTabBar';
-import { TAB_ORDER } from '../../src/navigation/tabBarLayout';
-import { DIMMED_OPACITY } from '../../src/components/characters/Character';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { Rect } from 'react-native-svg';
+import { TAB_LABELS, TAB_ORDER } from '../../src/navigation/tabBarLayout';
+import { HUB_DIMMED_OPACITY } from '../../src/navigation/FloatingTabBar';
+import { setMyKipColour, resetMyKipColour } from '../../src/lib/kip/myKipColour';
+import { KIP_COLOURS, kipArt } from '../../src/lib/kip/kipArt';
 import { useCoachStatus } from '../../src/lib/useCoachStatus';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
 
@@ -38,17 +40,19 @@ function setCoach(status: unknown) {
   (useCoachStatus as jest.Mock).mockReturnValue({ status, setStatus: jest.fn(), refresh });
 }
 
-// The hub character's mock label, and the opacity it is drawn at (every
-// opacity between the canvas and the hub-character wrapper, multiplied).
+// The hub KIP's drawn fills, and the opacity it is drawn at (every opacity between
+// the hub-character view and the tab, multiplied).
 function hub(utils: ReturnType<typeof render>) {
-  const wrapper = utils.getByTestId('hub-character', HIDDEN_OK);
-  const canvas = within(wrapper).getByTestId('character-canvas', HIDDEN_OK);
+  const kip = utils.getByTestId('hub-character', HIDDEN_OK);
+  const tab = utils.getByTestId('tab-Coach', HIDDEN_OK);
   let opacity = 1;
-  for (let node: typeof canvas | null = canvas; node; node = node === wrapper ? null : node.parent) {
-    const style = StyleSheet.flatten(node.props.style);
+  for (let node: typeof kip | null = kip; node && node !== tab; node = node.parent) {
+    // Host views only: a composite View passes the same style to its host.
+    const style = typeof node.type === 'string' ? StyleSheet.flatten(node.props.style) : null;
     if (style && typeof style.opacity === 'number') opacity *= style.opacity;
   }
-  return { label: canvas.props.accessibilityLabel as string, opacity };
+  const fills = within(kip).UNSAFE_getAllByType(Rect).map((r) => r.props.fill as string);
+  return { fills, opacity };
 }
 
 function makeProps(index = 0, preventDefault = false) {
@@ -74,17 +78,20 @@ beforeEach(() => {
   setCoach(enabledStatus);
 });
 
+afterEach(() => resetMyKipColour());
+
 describe('FloatingTabBar: story ring on the Profile tab', () => {
   const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
 
-  it.each(['dark', 'light'] as const)("rings the Profile icon in the recap coach's colour (%s), says so, and still opens Profile", async (scheme) => {
+  it.each(['dark', 'light'] as const)("rings the Profile icon in your KIP's colour (%s), whatever coach the recap names, says so, and still opens Profile", async (scheme) => {
     mockScheme = scheme;
+    setMyKipColour('lime');
     (fetchRecaps as jest.Mock).mockResolvedValue([week]);
     const props = makeProps(0);
     const utils = render(bar(props));
     await act(async () => {});
-    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring').props.style)).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
-    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
+    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring').props.style)).toMatchObject({ borderColor: storyRingColor('lime', scheme) });
+    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('lime', scheme) });
     // The tab opens Profile, so it only says what is ready.
     expect(utils.getByTestId('tab-Profile').props.accessibilityLabel).toBe('Profile. Your week is ready');
     fireEvent.press(utils.getByTestId('tab-Profile'));
@@ -109,10 +116,10 @@ describe('FloatingTabBar: story ring on the Profile tab', () => {
 });
 
 describe('FloatingTabBar', () => {
-  it('renders five labelled tabs, with the coach character in the middle', () => {
+  it('renders five labelled tabs, with KIP in the middle', () => {
     const { getByLabelText, getByTestId } = render(bar(makeProps()));
 
-    for (const label of ['Home', 'Activity', 'AI coach', 'Social', 'Profile']) expect(getByLabelText(label)).toBeTruthy();
+    for (const label of ['Home', 'Activity', 'KIP', 'Social', 'Profile']) expect(getByLabelText(label)).toBeTruthy();
     expect(getByTestId('tab-Coach')).toContainElement(getByTestId('hub-character', HIDDEN_OK));
   });
 
@@ -189,33 +196,34 @@ describe('FloatingTabBar', () => {
     expect((props as unknown as { navigation: { navigate: jest.Mock } }).navigation.navigate).toHaveBeenCalledWith('Coach', undefined);
   });
 
-  describe('hub character', () => {
-    it.each([0, 1, 2, 3, 4])('idles, animating at full brightness, with tab %i focused', (index) => {
+  describe('hub KIP', () => {
+    const resting = kipArt({ colour: 'coral', pose: 'rest', mood: 'idle' }).map((r) => r.fill);
+
+    it('labels the hub tab KIP and draws your KIP resting at scale 2', () => {
+      const s = render(bar(makeProps(0)));
+      expect(s.getByTestId('hub-character', HIDDEN_OK).props.style).toEqual(expect.objectContaining({ width: 32, height: 32 }));
+      expect(TAB_LABELS.Coach).toBe('KIP');
+      expect(hub(s).fills).toEqual(resting);
+    });
+
+    it.each([0, 1, 2, 3, 4])('rests at full brightness with tab %i focused', (index) => {
       const utils = render(bar(makeProps(index)));
 
-      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: 1 });
+      expect(hub(utils)).toEqual({ fills: resting, opacity: 1 });
     });
 
-    it('keeps idling, never paused, when the focused tab changes', () => {
-      const utils = render(bar(makeProps(2)));
-
-      utils.rerender(bar(makeProps(0)));
-
-      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: 1 });
-    });
-
-    it('idles dimmed when the status is unknown', () => {
+    it('dims when the status is unknown', () => {
       setCoach(null);
       const utils = render(bar(makeProps(0)));
 
-      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: DIMMED_OPACITY });
+      expect(hub(utils).opacity).toBe(HUB_DIMMED_OPACITY);
     });
 
-    it('idles dimmed when the coach is disabled, even on the Coach tab', () => {
+    it('dims when the coach is disabled, even on the KIP tab', () => {
       setCoach({ ...enabledStatus, enabled: false });
       const utils = render(bar(makeProps(2)));
 
-      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: DIMMED_OPACITY });
+      expect(hub(utils).opacity).toBe(HUB_DIMMED_OPACITY);
     });
 
     it('is not dimmed for an enabled coach the user has not consented to yet', () => {
@@ -225,18 +233,19 @@ describe('FloatingTabBar', () => {
       expect(hub(utils).opacity).toBe(1);
     });
 
-    it("shows the user's character from CharacterProvider", () => {
-      const utils = render(withCharacter(bar(makeProps(0)), { characterId: 'kit', recoveryBand: 'scorePoor' }));
+    it('is drawn in your KIP colour', () => {
+      setMyKipColour('cobalt');
+      const utils = render(bar(makeProps(0)));
 
-      // Idle even on a poor recovery day: the tab bar ignores moods.
-      expect(hub(utils).label).toBe('character:kit:idle:52:playing:none');
+      expect(hub(utils).fills).toEqual(kipArt({ colour: 'cobalt', pose: 'rest', mood: 'idle' }).map((r) => r.fill));
+      expect(hub(utils).fills).toContain(KIP_COLOURS.cobalt);
     });
 
-    it('draws the same character in light mode (its colours are fixed)', () => {
+    it('draws the same KIP in light mode (its colours are fixed)', () => {
       mockScheme = 'light';
       const utils = render(bar(makeProps(0)));
 
-      expect(hub(utils).label).toBe('character:mochi:idle:52:playing:none');
+      expect(hub(utils).fills).toEqual(resting);
     });
   });
 

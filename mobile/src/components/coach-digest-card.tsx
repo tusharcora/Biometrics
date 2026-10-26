@@ -4,9 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest, type CoachDigestDTO } from '../api/coach';
 import { fetchRecaps } from '../api/recaps';
 import { Text } from './ui/text';
-import { Character } from './characters/Character';
-import { useCharacterMood } from '../characters/useCharacterMood';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { KipHead } from './kip/KipHead';
+import type { KipMood } from '../lib/kip/kipArt';
+import { HOME_COPY } from '../lib/homeCopy';
 import { SectionLabel } from './ui/section-label';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -18,19 +18,18 @@ type State = { status: 'loading' } | { status: 'hidden' } | { status: 'error' } 
 function formatDigestDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-// The latest weekly recap from the coach. The caller only mounts this when the
-// coach is enabled and consented; it renders nothing at all when there is no
-// digest, so a quiet week leaves no empty card. When the digest is the WEEK
-// recap's story, tapping it opens that recap instead of the sheet.
-export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: string) => void } = {}) {
+// KIP's note: the latest weekly recap from KIP, with KIP's head in the day's
+// mood. The caller only mounts this when the coach is enabled and consented; it
+// renders nothing at all when there is no digest, so a quiet week leaves no
+// empty card. When the digest is the WEEK recap's story, tapping it opens that
+// recap instead of the sheet.
+export function CoachDigestCard({ onOpenRecap, mood = 'idle' }: { onOpenRecap?: (recapId: string) => void; mood?: KipMood } = {}) {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [recapId, setRecapId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const mood = useCharacterMood({ sending: false, answeredAt: null });
-  const focused = useScreenFocused();
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +69,7 @@ export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: strin
   }
 
   const { digest } = state;
+  const date = formatDigestDate(digest.createdAt);
 
   return (
     <>
@@ -81,16 +81,17 @@ export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: strin
       >
         <Card className="gap-2.5 border-coach/25 bg-coach/10">
           <View className="flex-row items-center gap-2">
-            <Character testID="coach-digest-character" mood={mood} size={18} paused={!focused} />
-            <SectionLabel className="flex-1 text-coach">Your weekly recap</SectionLabel>
-            <Text testID="coach-digest-date" className="text-caption text-muted-foreground">
-              {formatDigestDate(digest.createdAt)}
+            <KipHead testID="coach-digest-kip" mood={mood} />
+            <SectionLabel className="text-coach">{HOME_COPY.kipNote}</SectionLabel>
+            {/* Spoken without the middle dot. */}
+            <Text testID="coach-digest-date" accessibilityLabel={date} className="flex-1 text-caption text-muted-foreground">
+              {date ? `· ${date}` : ''}
             </Text>
           </View>
           <Text testID="coach-digest-preview" numberOfLines={3} className="text-heading">
             {digest.text}
           </Text>
-          <Text className="text-caption font-semibold text-coach">Tap to read it all →</Text>
+          <Text className="text-caption font-semibold text-coach">{HOME_COPY.readItAll}</Text>
         </Card>
       </Pressable>
 
@@ -98,8 +99,8 @@ export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: strin
         <SafeAreaView className="flex-1 bg-background">
           <ScrollView contentContainerStyle={{ gap: 12, padding: 16 }}>
             <View className="flex-row items-center justify-between">
-              <Text className="text-heading">Your weekly recap</Text>
-              <Text className="text-caption text-muted-foreground">{formatDigestDate(digest.createdAt)}</Text>
+              <Text testID="coach-digest-title" className="text-heading">{HOME_COPY.kipNote}</Text>
+              <Text className="text-caption text-muted-foreground">{date}</Text>
             </View>
             <Text testID="coach-digest-full" className="text-body">
               {digest.text}

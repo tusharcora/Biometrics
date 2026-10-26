@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { SHARING_CONSENT_LINES, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
+import { BUDDIES_INTRO, SHARING_CONSENT_LINES, SHARING_FOOTER, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
 
 it('summarises what a buddy shares', () => {
   expect(sharesSummary('Sam', [])).toBe('Sam shares mood only');
@@ -67,4 +67,10 @@ it('shows a missing number as absent, never as 0', () => {
   expect(formatNumber('steps', undefined)).toBe('–');
   expect(formatNumber('recovery', Number.NaN)).toBe('–');
   expect(formatNumber('recovery', 0)).toBe('0');
+});
+
+it("names KIP, not the coach, in what buddies always see (spec 2026-10-14 KIP Coach §7.6)", () => {
+  expect(BUDDIES_INTRO).toBe("You see their KIP's mood, never their numbers unless they share them.");
+  expect(SHARING_FOOTER).toBe('Buddies always see your mood and KIP. Each number stays off until you turn it on.');
+  expect(SHARING_CONSENT_LINES[SHARING_CONSENT_LINES.length - 1]).toBe('Your mood and KIP are always shared. You can turn any of these off at any time.');
 });

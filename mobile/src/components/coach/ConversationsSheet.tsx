@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
-import { listConversations, type CoachConversationSummaryDTO } from '../../api/coach';
+import { listCoachMemory, listConversations, type CoachConversationSummaryDTO } from '../../api/coach';
+import { KIP_COPY } from '../../lib/kipCopy';
+import { spokenLine } from '../../lib/kipStage';
 import { COLORS } from '../../theme';
+import { KipHead } from '../kip/KipHead';
 import { Button, buttonIconSize } from '../ui/button';
 import { SettingsGroup, SettingsRow } from '../ui/settings-list';
 import { Sheet } from '../ui/sheet';
@@ -48,12 +51,14 @@ interface ConversationsSheetProps {
 }
 
 // The ☰ sheet (spec 1.5): past conversations, titled by their first question,
-// newest first; the coach's memory; and a new chat. Re-read on every open.
+// newest first; what KIP remembers, with the count; and a new chat. Re-read on every open.
 export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpenMemory, currentId, now }: ConversationsSheetProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   const [state, setState] = useState<ListState>({ status: 'loading' });
   const [loadedAt, setLoadedAt] = useState(() => now ?? new Date());
+  // How many things KIP remembers; null until read, or when the read fails (the row then has no subtitle).
+  const [memoryCount, setMemoryCount] = useState<number | null>(null);
   // Bumped by every fresh load and on unmount, so a reply to an earlier
   // open (or to a sheet that is gone) is dropped.
   const generation = useRef(0);
@@ -109,6 +114,23 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  useEffect(() => {
+    if (!visible) return undefined;
+    let live = true;
+    listCoachMemory()
+      .then((items) => {
+        if (live) setMemoryCount(items.length);
+      })
+      .catch(() => {
+        if (live) setMemoryCount(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [visible]);
+
+  const memorySubtitle = memoryCount === null ? undefined : KIP_COPY.memorySubtitle(memoryCount);
+
   return (
     <Sheet visible={visible} onClose={onClose} testID="conversations-sheet">
       <View className="gap-5 pb-2">
@@ -123,10 +145,10 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
           <SettingsRow testID="conversations-new" icon="create-outline" tint={colors.accent} title="New chat" onPress={onNewChat} />
           <SettingsRow
             testID="conversations-memory"
-            icon="bulb-outline"
-            tint={colors.coach}
-            title="Coach memory"
-            subtitle="What the coach remembers about you"
+            leading={<KipHead testID="conversations-memory-kip" />}
+            title={KIP_COPY.memoryTitle}
+            subtitle={memorySubtitle}
+            accessibilityLabel={memorySubtitle ? spokenLine(`${KIP_COPY.memoryTitle} · ${memorySubtitle}`) : undefined}
             onPress={onOpenMemory}
           />
         </SettingsGroup>

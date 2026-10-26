@@ -11,8 +11,7 @@ import { Text } from '../components/ui/text';
 import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 
@@ -24,7 +23,6 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(token ? null : EXPIRED);
-  const focused = useScreenFocused();
 
   // When the app is already open on this screen, a fresh reset link updates
   // the params of this same route instead of mounting a new screen. A new
@@ -57,7 +55,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-          <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
+          <Kip testID="auth-kip" colour="coral" pose="wave" mood="idle" scale={3} />
           <PageTitle className="text-center">Choose a new password</PageTitle>
           {token ? <Text className="text-center text-body text-muted-foreground">{`Use at least ${MIN_PASSWORD_LENGTH} characters.`}</Text> : null}
         </Animated.View>

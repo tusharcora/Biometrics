@@ -9,8 +9,8 @@ import { apiFetch } from '../api/client';
 import { Text } from '../components/ui/text';
 import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { COLORS } from '../theme';
 import { syncTimezone } from '../lib/timezone';
@@ -31,7 +31,7 @@ export function ConnectHealthScreen() {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [error, setError] = useState<string | null>(null);
-  const focused = useScreenFocused();
+  const mine = useMyKipColour();
 
   async function handleConnect() {
     if (busy) return;
@@ -66,7 +66,7 @@ export function ConnectHealthScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerClassName="flex-grow gap-7 px-5 pb-6 pt-12">
         <View className="flex-row items-center justify-center gap-4 pt-2" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Character testID="connect-health-character" mood="idle" size={72} glow paused={!focused} />
+          <Kip testID="connect-health-kip" colour={mine} pose="wave" mood="idle" scale={4} />
           <View className="flex-row items-center gap-1.5">
             <View className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
             <View className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />

@@ -10,8 +10,7 @@ import { Text } from '../components/ui/text';
 import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
@@ -21,7 +20,6 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const focused = useScreenFocused();
 
   async function submit() {
     setBusy(true);
@@ -40,7 +38,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-          <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
+          <Kip testID="auth-kip" colour="coral" pose="wave" mood="idle" scale={3} />
           <PageTitle className="text-center">Reset your password</PageTitle>
           {sent ? (
             <Text testID="reset-sent" className="text-center text-body text-muted-foreground">

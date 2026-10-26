@@ -1,17 +1,17 @@
 import { useRef } from 'react';
 import { isLoaded } from 'expo-font';
 import { useColorScheme } from 'nativewind';
-import { chipTextColor } from '../../characters/palette';
-import { CHARACTERS } from '../../characters/registry';
-import type { CharacterId } from '../../characters/types';
-import { useSpriteClock } from '../../characters/useSpriteClock';
-import { FONTS } from '../../../theme';
+import { kipLabelColour } from '../../../lib/colour';
+import { KIP_COLOURS } from '../../../lib/kip/kipArt';
+import { useMyKipColour } from '../../../lib/kip/myKipColour';
+import { KIP_NAME } from '../../../lib/kipCopy';
+import { useFrameClock } from '../../../lib/useFrameClock';
+import { COLORS, FONTS } from '../../../theme';
 
 // The pixel face, for the few inline styles that still name it (the Campfire
 // scene and the share cards). App.tsx waits for it with Geist before anything
 // draws, so it is in; Geist stands in only if the font failed to load.
 export const SILKSCREEN = 'Silkscreen';
-export { hexAlpha } from '../../characters/palette';
 
 export function pixelFont(): string {
   try {
@@ -22,22 +22,19 @@ export function pixelFont(): string {
 }
 
 /**
- * The coach's name and colours for a thinking style. `accent` is for fills;
- * `text` is the focus-chip text colour: the accent darkened (light mode) or
- * lightened toward white (dark mode) until it reads at 4.6:1.
+ * KIP's name and colours for a thinking style: `accent` (your KIP colour) for fills; `text` for the "KIP" label,
+ * which is the KIP colour only where it reads on the dark card, else `foreground` (spec §3.4).
  */
-export function useCoachVoice(id: CharacterId) {
+export function useKipVoice() {
   const { colorScheme } = useColorScheme();
-  const info = CHARACTERS[id];
-  return { name: info.name, accent: info.accent, text: chipTextColor(info.accent, colorScheme) };
+  const mine = useMyKipColour();
+  const foreground = (colorScheme === 'dark' ? COLORS.dark : COLORS.light).foreground;
+  return { name: KIP_NAME, accent: KIP_COLOURS[mine], text: kipLabelColour(mine, colorScheme) ?? foreground };
 }
 
-/**
- * Milliseconds since this style appeared, re-rendering on the shared sprite
- * tick. Paused (screen out of focus, Reduce Motion) → 0: the first frame.
- */
+/** Milliseconds since this style appeared, on the shared frame tick. Paused → 0: the first frame. */
 export function useElapsed(paused: boolean): number {
-  const t = useSpriteClock(paused);
+  const t = useFrameClock(paused);
   const mountedAt = useRef(Date.now());
   return paused || t === 0 ? 0 : Math.max(0, Date.now() - mountedAt.current);
 }

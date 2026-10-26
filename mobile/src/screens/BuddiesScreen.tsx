@@ -7,6 +7,7 @@ import { BuddyListRow } from '../components/buddies/BuddyListRow';
 import { IdentityGate } from '../components/buddies/IdentityGate';
 import { Button } from '../components/ui/button';
 import { Text } from '../components/ui/text';
+import { BUDDIES_INTRO } from '../lib/buddyCopy';
 import { refreshBuddies, useBuddies } from '../lib/buddiesStore';
 import { useRefreshBuddiesOnFocus } from '../lib/useRefreshBuddiesOnFocus';
 
@@ -33,7 +34,7 @@ function BuddiesBody({ navigation }: { navigation: Nav }) {
   useRefreshBuddiesOnFocus();
   return (
     <View className="flex-1 gap-3 px-4 pt-3">
-      <Text className="text-caption text-muted-foreground">You see their coach's mood, never their numbers unless they share them.</Text>
+      <Text className="text-caption text-muted-foreground">{BUDDIES_INTRO}</Text>
       <BuddyList navigation={navigation} />
     </View>
   );

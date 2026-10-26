@@ -2,17 +2,17 @@ import React from 'react';
 import { View } from 'react-native';
 import { Text } from '../../ui/text';
 import { Lines } from './Lines';
-import { useCoachVoice, useElapsed } from './shared';
+import { useElapsed, useKipVoice } from './shared';
 import type { ThinkingStyleProps } from './types';
 
 const SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
 
 // F (default): the backend's real progress steps as a checklist. Finished
 // steps are ticked and muted; the current one spins. Before the first status
-// arrives (or from a server that sends none) it shows the personality line.
+// arrives (or from a server that sends none) it shows KIP's line.
 export function Steps(props: ThinkingStyleProps) {
-  const { characterId, steps, paused } = props;
-  const { text } = useCoachVoice(characterId);
+  const { steps, paused } = props;
+  const { text } = useKipVoice();
   const elapsed = useElapsed(paused);
   if (!steps.length) return <Lines {...props} />;
   const spinner = SPINNER[Math.floor(elapsed / 90) % SPINNER.length];

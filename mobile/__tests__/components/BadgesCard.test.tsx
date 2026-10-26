@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements, type AchievementFamily } from '../../src/api/achievements';
 import { BadgesCard } from '../../src/components/achievements/BadgesCard';
@@ -33,7 +32,7 @@ it('shows the seven badges at their levels, the count out of 35 and the family c
   load.mockResolvedValue(CANVAS);
   const onSeeAll = jest.fn();
   const onOpen = jest.fn();
-  render(withCharacter(<BadgesCard onSeeAll={onSeeAll} onOpen={onOpen} />));
+  render(<BadgesCard onSeeAll={onSeeAll} onOpen={onOpen} />);
 
   expect(await screen.findByTestId('badges-count')).toHaveTextContent('BADGES · 9 OF 35');
   for (const f of FAMILIES) expect(screen.getByTestId(`badges-card-${f}`)).toBeTruthy();
@@ -57,7 +56,7 @@ it('shows the seven badges at their levels, the count out of 35 and the family c
 
 it('keeps the tile names to one line under their icons, and sets the count as the pixel label', async () => {
   load.mockResolvedValue(CANVAS);
-  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  render(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />);
   const count = await screen.findByTestId('badges-count');
   expect(StyleSheet.flatten(count.props.style).fontFamily).toBe(FONTS.pixel);
   for (const f of FAMILIES) {
@@ -70,7 +69,7 @@ it('keeps the tile names to one line under their icons, and sets the count as th
 it('uses the dark palette for labels and drops the bar outline in dark mode', async () => {
   mockScheme = 'dark';
   load.mockResolvedValue(CANVAS);
-  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  render(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />);
   expect(await screen.findByTestId('badges-count')).toHaveTextContent('BADGES · 9 OF 35');
   expect(screen.getByTestId('badges-card-SLEEP_GOAL-label')).toHaveStyle({ color: COLORS.dark.foreground });
   expect(screen.getByTestId('badges-card-EVERY_DAY_LOGGED-label')).toHaveStyle({ color: COLORS.dark.muted });
@@ -79,20 +78,20 @@ it('uses the dark palette for labels and drops the bar outline in dark mode', as
 
 it('draws no outline on an empty bar in light mode (no sliver at 0%)', async () => {
   load.mockResolvedValue(achievementsFixture());
-  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  render(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />);
   expect(await screen.findByTestId('badges-next-up-bar')).toHaveStyle({ width: '0%', borderWidth: 0 });
 });
 
 it('has no next-up row when every family is at the top level', async () => {
   load.mockResolvedValue(achievementsFixture(Object.fromEntries(FAMILIES.map((f) => [f, { level: 5 }])) as Partial<Record<AchievementFamily, { level: number }>>));
-  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  render(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />);
   expect(await screen.findByTestId('badges-count')).toHaveTextContent('BADGES · 35 OF 35');
   expect(screen.queryByTestId('badges-next-up')).toBeNull();
 });
 
 it('stays hidden against a backend without badges (404) and on an error', async () => {
   load.mockResolvedValue(null);
-  const first = render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  const first = render(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />);
   await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
   await act(async () => {});
   expect(screen.queryByTestId('badges-card')).toBeNull();
@@ -100,7 +99,7 @@ it('stays hidden against a backend without badges (404) and on an error', async 
 
   resetAchievements();
   load.mockRejectedValue(new Error('offline'));
-  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  render(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />);
   await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   await act(async () => {});
   expect(screen.queryByTestId('badges-card')).toBeNull();

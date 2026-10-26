@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>W1 · Isometric room</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:rgb(155,157,166)}
+.card{border-radius:22px;background:rgb(20,22,27);border:1px solid rgb(30,33,40);box-sizing:border-box}
+.chip{min-height:36px;padding:7px 12px;font-size:13px;white-space:normal;text-align:left}
+.say{position:absolute;font-family:'Silkscreen',monospace;font-size:10px;line-height:12px;letter-spacing:1px;padding:5px 8px;border-radius:8px;background:rgb(245,245,244);color:rgb(10,11,14);white-space:nowrap}
+.hot{position:absolute;display:flex;align-items:center;gap:5px;height:26px;padding:0 7px;border-radius:8px;background:rgba(10,11,14,.82);border:1px solid rgba(255,255,255,.18);text-decoration:none;color:rgb(245,245,244);box-sizing:border-box;white-space:nowrap}
+.hot .k{font-family:'Silkscreen',monospace;font-size:9px;letter-spacing:1px}
+.hot .v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.hot .d{width:4px;height:4px;background:currentColor}
+.tag{position:absolute;font-family:'Silkscreen',monospace;font-size:9px;line-height:12px;letter-spacing:1px;color:rgb(245,245,244);text-align:center;text-decoration:none;padding:2px 4px;border-radius:4px;background:rgba(10,11,14,.78)}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 20px 18px;border-top:1px solid rgb(30,33,40)}
+.ub{align-self:flex-end;max-width:78%;padding:10px 14px;border-radius:12px;background:rgb(44,47,55);font-size:15px;line-height:21px}
+.kt{font-size:15px;line-height:22px}
+@keyframes caret{50%{opacity:0}}
+.caret{display:inline-block;width:8px;height:15px;vertical-align:-2px;margin-left:2px;animation:caret 1s steps(1) infinite}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; overflow: hidden; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; position: relative; display: flex; flex-direction: column; padding-top: 50px">
+  <div style="display: flex; align-items: center; gap: 8px; padding: 4px 20px 10px">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+      <h1 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 22px; line-height: 24px; letter-spacing: 1px">KIP</h1>
+      <span class="muted" style="font-size: 13px">In the diorama · fair day</span>
+    </div>
+    <a href="K4b.dc.html" class="b ol" aria-label="Decorate KIP's room" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h4l11-11-4-4L3 17z"></path><path d="M14 6l4 4"></path><path d="M17 3l4 4"></path></svg></a>
+    <button class="b ol" aria-label="Conversations and what KIP remembers" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+    <button class="b ol" aria-label="New chat" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button>
+  </div>
+  <div style="position: relative; width: 390px; height: 312px; flex: none">
+    <svg role="img" aria-label="{{aria}}" width="{{sc.w}}" height="{{sc.h}}" shape-rendering="crispEdges" style="position: absolute; left: 0; top: 0"><sc-for list="{{sc.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg>
+    <a href="#" class="hot" aria-label="Recovery 58, cloudy day. Open Recovery" style="left: 12px; top: 156px"><span class="d" style="color: rgb(163,230,53)"></span><span class="k" style="color: rgb(163,230,53)">RECOVERY</span><span class="v">58</span></a>
+    <sc-if value="{{isThinking}}" hint-placeholder-val="{{ true }}"><span class="say" style="left: 150px; top: 132px">ON IT…</span></sc-if><sc-if value="{{isAnswering}}" hint-placeholder-val="{{ false }}"><span class="say" style="left: 140px; top: 132px">HERE’S MY TAKE</span></sc-if>
+  </div>
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 14px 20px 12px; min-height: 0">
+    <div class="ub">Why is my recovery lower today?</div>
+    <div style="display: flex; flex-direction: column; gap: 6px"><span class="label" style="color: {{accent}}">KIP</span><div class="kt">Mostly last night. You slept less than usual and woke twice after 3 am, so your HRV didn’t climb the way it normally does overnight.</div></div>
+    <div class="ub">Should I still go for my run?</div>
+    <sc-if value="{{isThinking}}" hint-placeholder-val="{{ true }}">
+      <div role="status" aria-label="KIP is working on it" style="display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px dashed rgb(44,47,55)">
+        <span class="label" style="color: {{accent}}">KIP is typing it up</span>
+        <span class="muted" style="font-size: 13px">✓ Read last night’s sleep</span>
+        <span class="muted" style="font-size: 13px">✓ Checked your training this week</span>
+        <span style="font-size: 13px">· Weighing an easy run against rest</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{isAnswering}}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px"><span class="label" style="color: {{accent}}">KIP</span>
+        <div class="kt">Yes, keep it easy. An easy 30 minutes is fine on a fair day; save the intervals for when your sleep is back to normal.</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px"><button class="b ol chip">What counts as easy for me?</button><button class="b ol chip">When can I do intervals again?</button></div></div>
+    </sc-if>
+  </div>
+  <div style="padding: 4px 16px 14px">
+    <div style="display: flex; align-items: center; gap: 8px; border: 1px solid rgb(44,47,55); border-radius: 12px; padding: 6px 6px 6px 14px; background: rgb(20,22,27)">
+      <label for="w1-input" style="position: absolute; left: -9999px">Message KIP</label>
+      <input id="w1-input" placeholder="Ask KIP…" style="flex: 1; min-width: 0; height: 36px; border: 0; outline: none; background: transparent; color: rgb(245,245,244); font: 15px 'Geist', system-ui, sans-serif">
+      <button class="b ol" aria-label="Prompt shortcuts" style="width: 36px; height: 36px; font-size: 16px">/</button>
+      <button class="b df" aria-label="Stop" style="width: 36px; height: 36px"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect width="12" height="12" fill="currentColor"></rect></svg></button>
+    </div>
+  </div>
+  <div class="foot"><span class="label">ALL 12 ROOM SLOTS · 4 WORN</span><span class="label" style="color: {{accent}}">{{stageLabel}}</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"stage": {"editor": "enum", "options": ["thinking", "answering"], "default": "thinking"}, "weather": {"editor": "enum", "options": ["clear", "mostly", "cloudy", "stormy", "night"], "default": "cloudy"}, "kipColor": {"editor": "color", "default": "#FB7185", "options": ["#FB7185", "#3B82F6", "#A3E635", "#2A2F3A"]}, "$preview": {"width": 390, "height": 1100}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+var KPOSES = { rest: {}, wave: { arms: [[12, 9, "s"], [13, 8, "s"]] }, type: { arms: [[12, 10, "s"], [13, 10, "s"]] }, read: { arms: [[3, 10, "b"], [12, 10, "s"]] }, point: { arms: [[3, 9, "b"], [2, 8, "b"]] } };
+var KMOODS = { idle: {}, blink: { eyes: "shut" }, glance: { eyes: "glance" }, up: { eyes: "up" }, down: { eyes: "down" } };
+var WEAR = {
+  beanie: [[4, 2], ["...wW...", ".LLrrrR.", "LrrrrrrR", "ddddddDD"], { w: "#F8FAFC", W: "#CBD5E1", r: "#EF4444", L: "#F87171", R: "#B91C1C", d: "#B91C1C", D: "#7F1D1D" }],
+  cap: [[4, 4], [".LbbbbR....", "bbbbbbbbkkk"], { b: "#2563EB", L: "#60A5FA", R: "#1E40AF", k: "#1E3A8A" }],
+  bucket: [[3, 3], ["..cccccc..", "..dddddd..", "bbbbbbbbbb"], { c: "@h", d: "@d", b: "@s" }],
+  round: [[5, 7], ["FFFFFf", "f.ff.f", "ffffff"], { F: "#FCD34D", f: "#D97706" }],
+  mask: [[4, 6], ["kkkkkkkk", ".mm..mm."], { k: "#334155", m: "#C4B5FD" }],
+  scarf: [[3, 10], ["LssssssssS", ".ddddddLs.", ".......Ls.", ".......dd."], { L: "#F87171", s: "#DC2626", S: "#991B1B", d: "#991B1B" }],
+  bowtie: [[5, 10], ["bb..bb", "bbkkbb", "bb..bb"], { b: "#2563EB", k: "#1E3A8A" }],
+  towel: [[3, 10], ["ssssssssss", "w........w", "w........w"], { s: "#60A5FA", w: "#F1F5F9" }],
+  phones: [[3, 5], ["..kkkkkk..", ".k......k.", "cc......cc", "cC......cC", "cc......cc"], { k: "#1F2937", c: "#38BDF8", C: "#0369A1" }],
+  earbuds: [[3, 8], ["w........w", "w........w"], { w: "#F8FAFC" }],
+  muffs: [[3, 5], ["..kkkkkk..", ".k......k.", "ww......ww", "ww......ww", "ww......ww"], { k: "#94A3B8", w: "#FBCFE8" }]
+};
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kBlank() { var g = []; for (var i = 0; i < KN; i++) { var r = []; for (var j = 0; j < KN; j++) r.push(null); g.push(r); } return g; }
+function kPut(g, x, y, c) { if (x >= 0 && y >= 0 && x < KN && y < KN && c) g[y][x] = c; }
+// KIP sprite: body colour, pose, mood, worn ids (head, face, neck, ears order), flip
+function kSprite(body, pn, mn, wear, flip) {
+  var p = kRamp(body), pose = KPOSES[pn] || {}, mood = KMOODS[mn] || {}, g = kBlank(), x, y, c;
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) if (KBASE[y][x] !== ".") g[y][x] = KBASE[y][x];
+  var em = mood.eyes;
+  KEYES.forEach(function (e, i) {
+    var cs = [[e[0], e[1]]];
+    if (em === "shut") cs = [[e[0], e[1]], [i === 0 ? e[0] - 1 : e[0] + 1, e[1]]];
+    else if (em === "up") cs = [[e[0], e[1] - 1]];
+    else if (em === "down") cs = [[e[0], e[1] + 1]];
+    else if (em === "glance") cs = [[e[0] + 1, e[1]]];
+    cs.forEach(function (q) { kPut(g, q[0], q[1], "e"); });
+  });
+  (pose.arms || []).forEach(function (a) { if (!g[a[1]][a[0]]) g[a[1]][a[0]] = a[2]; });
+  var out = kBlank();
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) out[y][x] = p[c]; }
+  (wear || []).forEach(function (id) {
+    var it = WEAR[id]; if (!it) return;
+    it[1].forEach(function (row, yy) { for (var xx = 0; xx < row.length; xx++) { var ch = row[xx]; if (ch === ".") continue; var col = it[2][ch]; if (col && col[0] === "@") col = p[col.slice(1)]; kPut(out, it[0][0] + xx, it[0][1] + yy, col); } });
+  });
+  if (flip) out = out.map(function (row) { return row.slice().reverse(); });
+  return out;
+}
+function kPush(r, cells, ox, oy) { for (var y = 0; y < KN; y++) for (var x = 0; x < KN; x++) if (cells[y][x]) r.push([ox + x, oy + y, 1, 1, cells[y][x]]); }
+
+function R(r, x, y, w, h, c) { if (w > 0 && h > 0) r.push([x, y, w, h, c]); }
+function pxLayers(rects, u) { var out = [], cur = null; rects.forEach(function (q) { if (!cur || cur.fill !== q[4]) { cur = { fill: q[4], d: "" }; out.push(cur); } cur.d += "M" + q[0] * u + " " + q[1] * u + "h" + q[2] * u + "v" + q[3] * u + "h-" + q[2] * u + "z"; }); return out; }
+function pic(rects, w, h, u) { return { w: w * u, h: h * u, layers: pxLayers(rects, u) }; }
+// clipped rect
+function Rc(r, b, x, y, w, h, c) { var x0 = Math.max(x, b[0]), y0 = Math.max(y, b[1]), x1 = Math.min(x + w, b[0] + b[2]), y1 = Math.min(y + h, b[1] + b[3]); R(r, x0, y0, x1 - x0, y1 - y0, c); }
+// convex polygon, filled column by column
+function poly(r, pts, c) {
+  var minX = 1e9, maxX = -1e9, i, x;
+  pts.forEach(function (p) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); });
+  for (x = Math.round(minX); x < Math.round(maxX); x++) {
+    var cx = x + 0.5, lo = 1e9, hi = -1e9;
+    for (i = 0; i < pts.length; i++) { var a = pts[i], b = pts[(i + 1) % pts.length]; if ((a[0] <= cx && b[0] > cx) || (b[0] <= cx && a[0] > cx)) { var y = a[1] + (cx - a[0]) / (b[0] - a[0]) * (b[1] - a[1]); lo = Math.min(lo, y); hi = Math.max(hi, y); } }
+    if (hi > lo) { var y0 = Math.round(lo), y1 = Math.round(hi); if (y1 > y0) R(r, x, y0, 1, y1 - y0, c); }
+  }
+}
+// rect list with @b/@h/@s/@d against a ramp
+function stamp(r, list, ox, oy, body, flip, w) { var p = kRamp(body || "#475569"); list.forEach(function (q) { var c = q[4][0] === "@" ? p[q[4].slice(1)] : q[4]; R(r, flip ? ox + w - q[0] - q[2] : ox + q[0], oy + q[1], q[2], q[3], c); }); }
+
+// today's Recovery weather, drawn into box b = [x, y, w, h]
+var SKY = { clear: ["#60A5FA", "#7DB4FB", "#93C5FD"], mostly: ["#60A5FA", "#7DB4FB", "#93C5FD"], cloudy: ["#7C8AA0", "#8592A6", "#A3AEC0"], stormy: ["#232C3B", "#2B3546", "#3A4559"], night: ["#0B1222", "#0F172A", "#1E1B4B"] };
+function cloud(r, b, x, y, n, c, hl) { Rc(r, b, x, y, n, 3, c); Rc(r, b, x + 2, y - 1, n - 5, 1, hl); Rc(r, b, x + Math.round(n / 3), y - 2, Math.round(n / 3), 1, hl); }
+function sky(r, b, wx, opt) {
+  opt = opt || {};
+  var s = opt.sky || SKY[wx] || SKY.cloudy, x = b[0], y = b[1], w = b[2], h = b[3], i, k;
+  var h1 = Math.round(h * 0.4), h2 = Math.round(h * 0.3);
+  R(r, x, y, w, h1, s[0]); R(r, x, y + h1, w, h2, s[1]); R(r, x, y + h1 + h2, w, h - h1 - h2, s[2]);
+  var sx = x + Math.round(w * (opt.sunX == null ? 0.68 : opt.sunX)), sy = y + Math.round(h * (opt.sunY == null ? 0.18 : opt.sunY)), ss = Math.max(4, Math.min(9, Math.round(Math.min(w, h) / 5)));
+  if (wx === "clear" || wx === "mostly") { Rc(r, b, sx, sy, ss, ss, opt.sunC || "#FBBF24"); Rc(r, b, sx + 1, sy - 1, ss - 2, 1, "#FDE68A"); Rc(r, b, sx - 1, sy + 1, 1, ss - 2, "#FDE68A"); }
+  if (wx === "mostly") cloud(r, b, x + Math.round(w * 0.12), y + Math.round(h * 0.55), Math.max(8, Math.round(w * 0.32)), "#F3F4F6", "#FFFFFF");
+  if (wx === "cloudy") { Rc(r, b, sx + 1, sy, ss - 1, ss - 2, "#FCD34D"); cloud(r, b, x + Math.round(w * 0.06), y + Math.round(h * 0.3), Math.max(8, Math.round(w * 0.4)), "#E5E7EB", "#F3F4F6"); cloud(r, b, x + Math.round(w * 0.48), y + Math.round(h * 0.48), Math.max(8, Math.round(w * 0.44)), "#CBD5E1", "#E2E8F0"); cloud(r, b, x + Math.round(w * 0.1), y + Math.round(h * 0.8), Math.max(6, Math.round(w * 0.3)), "#CBD5E1", "#E2E8F0"); }
+  if (wx === "stormy") {
+    Rc(r, b, x, y + Math.round(h * 0.1), w, Math.round(h * 0.18), "#1E293B"); Rc(r, b, x + Math.round(w * 0.12), y + Math.round(h * 0.28), Math.round(w * 0.7), 2, "#1E293B");
+    for (i = 0, k = x + 2; k < x + w - 1; k += 4, i++) { Rc(r, b, k, y + Math.round(h * 0.38) + (i % 3) * 2, 1, 3, "#93C5FD"); Rc(r, b, k + 2, y + Math.round(h * 0.68) + (i % 2) * 2, 1, 3, "#93C5FD"); }
+    var lx = x + Math.round(w * 0.55), ly = y + Math.round(h * 0.3); Rc(r, b, lx, ly, 2, 4, "#FDE047"); Rc(r, b, lx - 2, ly + 4, 2, 3, "#FDE047"); Rc(r, b, lx - 1, ly + 7, 1, 2, "#FDE047");
+  }
+  if (wx === "night") { Rc(r, b, sx, sy, ss, ss, "#F1F5F9"); Rc(r, b, sx + Math.round(ss / 2), sy, ss - Math.round(ss / 2), Math.round(ss / 2), s[0]); [[0.12, 0.2], [0.3, 0.5], [0.18, 0.82], [0.85, 0.72], [0.45, 0.14], [0.6, 0.6]].forEach(function (q) { Rc(r, b, x + Math.round(w * q[0]), y + Math.round(h * q[1]), 1, 1, "#F8FAFC"); }); }
+}
+function rainOver(r, b, wx, gap) { if (wx !== "stormy") return; gap = gap || 6; for (var yy = b[1], j = 0; yy < b[1] + b[3]; yy += 7, j++) for (var xx = b[0] + (j % 2) * 3; xx < b[0] + b[2]; xx += gap) Rc(r, b, xx, yy + (xx % 3), 1, 3, "rgba(147,197,253,0.55)"); }
+
+function plant(r, x, y, kind) {
+  if (kind === "tall") { R(r, x, y, 8, 7, "#E5E7EB"); R(r, x - 1, y - 1, 10, 2, "#F8FAFC"); R(r, x + 3, y - 14, 2, 13, "#15803D"); R(r, x - 3, y - 16, 6, 4, "#22C55E"); R(r, x + 4, y - 20, 7, 5, "#16A34A"); R(r, x - 2, y - 10, 5, 3, "#4ADE80"); R(r, x + 5, y - 11, 6, 3, "#22C55E"); return; }
+  if (kind === "cactus") { R(r, x + 1, y + 2, 6, 5, "#C2410C"); R(r, x + 3, y - 7, 3, 9, "#65A30D"); R(r, x + 1, y - 4, 2, 3, "#65A30D"); R(r, x + 6, y - 5, 2, 3, "#65A30D"); R(r, x + 3, y - 8, 2, 1, "#F472B6"); return; }
+  R(r, x, y, 8, 7, "#B45309"); R(r, x - 1, y - 1, 10, 2, "#D97706"); R(r, x + 3, y - 8, 2, 7, "#4ADE80"); R(r, x, y - 6, 3, 2, "#22C55E"); R(r, x + 5, y - 7, 3, 2, "#22C55E"); R(r, x - 1, y - 9, 2, 3, "#16A34A"); R(r, x + 7, y - 10, 2, 3, "#16A34A");
+}
+var CAT = ["........k..k", "........kkkk", "........kekk", "t.kkkkkkkkkk", "tkkkkkkkkkk.", ".dddddddddd."];
+function cat(r, x, y, c, flip) { CAT.forEach(function (row, yy) { for (var xx = 0; xx < 12; xx++) { var ch = row[xx], col = ch === "k" ? c : ch === "e" ? "#14161B" : ch === "t" ? kDark(c, 0.8) : ch === "d" ? kDark(c, 0.7) : null; if (col) R(r, flip ? x + 11 - xx : x + xx, y + yy, 1, 1, col); } }); }
+function art(r, x, y, a, b) { R(r, x, y, 18, 14, "#1F2937"); R(r, x + 1, y + 1, 16, 12, a); R(r, x + 3, y + 8, 6, 5, b); R(r, x + 6, y + 6, 4, 7, b); R(r, x + 12, y + 3, 2, 2, "#FDE68A"); }
+function books(r, x, y, cols) { cols.forEach(function (c, i) { var h = [7, 5, 8, 6, 4, 7][i % 6]; R(r, x, y - h, 3, h, c); x += 4; }); }
+function mug(r, x, y) { R(r, x, y, 3, 4, "#F1F5F9"); R(r, x + 3, y + 1, 1, 2, "#F1F5F9"); }
+function monitor(r, x, y, mode, accent, night) {
+  R(r, x, y, 26, 13, "#1F2937"); R(r, x + 1, y + 1, 24, 11, "#0F1A2A"); R(r, x + 11, y + 13, 3, 3, "#334155"); R(r, x + 7, y + 15, 11, 1, "#334155");
+  var ix = x + 1, iy = y + 1, L = "#7DD3FC";
+  if (mode === "dots") { R(r, ix + 5, iy + 5, 2, 2, accent); R(r, ix + 10, iy + 5, 2, 2, accent); R(r, ix + 15, iy + 5, 2, 2, accent); }
+  else if (mode === "chart") [[3, 3], [6, 5], [9, 2], [12, 6], [15, 4]].forEach(function (q) { R(r, ix + q[0], iy + 9 - q[1], 2, q[1], q[0] === 12 ? accent : L); });
+  else { R(r, ix + 2, iy + 2, 10, 1, L); R(r, ix + 2, iy + 4, 16, 1, L); R(r, ix + 2, iy + 6, 8, 1, L); R(r, ix + 2, iy + 8, 13, 1, L); }
+  if (night) R(r, x - 3, y - 2, 32, 18, "rgba(125,211,252,0.07)");
+}
+function deskLamp(r, x, y, c, night) { R(r, x, y - 2, 5, 2, "#334155"); R(r, x + 2, y - 10, 1, 8, "#334155"); R(r, x - 3, y - 13, 7, 3, c); if (night) R(r, x - 5, y - 10, 11, 10, "rgba(253,224,71,0.18)"); }
+function floorLamp(r, x, y, c) { R(r, x + 3, y - 42, 1, 42, "#94A3B8"); R(r, x, y - 46, 7, 4, c); R(r, x + 1, y, 5, 1, "#94A3B8"); }
+var BEANBAG = [[5, 1, 6, 2, "@h"], [3, 3, 10, 3, "@b"], [1, 6, 14, 8, "@b"], [0, 9, 16, 5, "@s"], [3, 7, 8, 1, "@h"]];
+var WEIGHTS = [[0, 6, 1, 26, "#334155"], [11, 6, 1, 26, "#334155"], [0, 9, 12, 1, "#334155"], [0, 20, 12, 1, "#334155"], [-1, 32, 14, 1, "#1F2937"], [1, 6, 2, 3, "#DC2626"], [3, 7, 6, 1, "#94A3B8"], [9, 6, 2, 3, "#DC2626"], [1, 17, 2, 3, "#2563EB"], [3, 18, 6, 1, "#94A3B8"], [9, 17, 2, 3, "#2563EB"], [1, 28, 2, 4, "#111827"], [3, 29, 6, 1, "#94A3B8"], [9, 28, 2, 4, "#111827"]];
+var KETTLE = [[2, 0, 5, 1, "#1F2937"], [1, 1, 1, 3, "#1F2937"], [7, 1, 1, 3, "#1F2937"], [1, 3, 7, 1, "@b"], [0, 4, 9, 7, "@b"], [1, 11, 7, 1, "@s"], [2, 5, 2, 2, "@h"]];
+var YOGAMAT = [[1, 0, 5, 26, "@b"], [0, 0, 7, 2, "@h"], [2, 0, 3, 2, "@d"], [0, 10, 7, 1, "#1F2937"], [0, 18, 7, 1, "#1F2937"]];
+var CUSHION = [[1, 0, 12, 3, "#E5E7EB"], [1, 0, 12, 1, "#F8FAFC"], [0, 3, 14, 4, "@b"], [0, 3, 14, 1, "@h"], [1, 7, 12, 1, "@d"]];
+// starter furnishing palette, same as K4
+var T = { wall: "#2A3140", wall2: "#323A4B", trim: "#1E2430", trim2: "#191E28", floor: "#5B4636", floor2: "#4A382B", rug: "#475569", rug2: "#334155", desk: "#7C5A3E", deskTop: "#9A7350", chair: "#3F4656", lamp: "#F59E0B", sleep: "#9333EA" };
+function planks(r, x, y, w, h) { R(r, x, y, w, h, T.floor); for (var yy = y + 4; yy < y + h; yy += 5) R(r, x, yy, w, 1, T.floor2); for (yy = y; yy < y + h; yy += 5) for (var xx = x + ((yy - y) % 10 ? 8 : 20); xx < x + w; xx += 24) R(r, xx, yy, 1, 5, T.floor2); }
+function panelWall(r, x, y, w, h) { R(r, x, y, w, h, T.wall); var py = y + h - 18; R(r, x, py, w, 1, T.wall2); for (var xx = x + 4; xx < x + w; xx += 12) R(r, xx, py + 2, 1, 14, T.wall2); }
+var STAGE = { thinking: { pose: "type", mood: "glance", scr: "dots" }, answering: { pose: "wave", mood: "idle", scr: "chart" } };
+function accentOf(c) { return kLum(c) < 0.12 ? "#F5F5F4" : c; }
+
+function boardVals(o) {
+  var r = [], N = 26, Hw = 34, cx = 65, ty = 40, wx = o.wx, night = wx === "night", s = SKY[wx] || SKY.cloudy;
+  function P(gx, gy, gz) { return [cx + 2 * (gx - gy), ty + gx + gy - gz]; }
+  function box(x, y, z, w, d, h, top, lf, rt) { poly(r, [P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)], lf); poly(r, [P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)], rt); poly(r, [P(x, y, z + h), P(x + w, y, z + h), P(x + w, y + d, z + h), P(x, y + d, z + h)], top); }
+  function line2(a, b, c, t) { t = t || 1; poly(r, [a, b, [b[0], b[1] + t], [a[0], a[1] + t]], c); }
+  function qL(a0, a1, z0, z1, c) { poly(r, [P(0, a1, z0), P(0, a0, z0), P(0, a0, z1), P(0, a1, z1)], c); }
+  function qR(a0, a1, z0, z1, c) { poly(r, [P(a0, 0, z0), P(a1, 0, z0), P(a1, 0, z1), P(a0, 0, z1)], c); }
+  function qY(y, a0, a1, z0, z1, c) { poly(r, [P(a0, y, z0), P(a1, y, z0), P(a1, y, z1), P(a0, y, z1)], c); }
+  function qF(x0, y0, x1, y1, c) { poly(r, [P(x0, y0, 0), P(x1, y0, 0), P(x1, y1, 0), P(x0, y1, 0)], c); }
+  var g, i;
+  poly(r, [P(-1, -1, -7), P(N + 2, -1, -7), P(N + 2, N + 2, -7), P(-1, N + 2, -7)], "rgba(0,0,0,0.45)");
+  box(0, 0, -4, N, N, 4, T.floor, "#3E2F24", "#4A382B");
+  for (g = 3; g < N; g += 3) line2(P(0, g, 0), P(N, g, 0), T.floor2);
+  for (g = 2; g < N; g += 6) { line2(P(g, 0, 0), P(g, 3, 0), T.floor2); line2(P(g + 3, 3, 0), P(g + 3, 6, 0), T.floor2); }
+  box(-2, 0, 0, 2, N, Hw, "#3A4252", T.trim2, T.wall);
+  box(0, -2, 0, N, 2, Hw, "#3A4252", "#313948", T.trim2);
+  box(-2, -2, 0, 2, 2, Hw, "#3A4252", T.trim2, T.trim2);
+  line2(P(0, 0, 11), P(0, N, 11), T.wall2); line2(P(0, 0, 11), P(N, 0, 11), "#3A4254");
+  for (g = 2; g < N; g += 3) { var pl = P(0, g, 10); R(r, pl[0], pl[1], 1, 8, T.wall2); var pr = P(g, 0, 10); R(r, pr[0], pr[1], 1, 8, "#3A4254"); }
+  line2(P(0, 0, 2), P(0, N, 2), T.trim2, 2); line2(P(0, 0, 2), P(N, 0, 2), T.trim2, 2);
+  // window, left wall: today's Recovery weather
+  qL(6, 18, 13, 31, T.trim);
+  qL(7, 17, 25, 30, s[0]); qL(7, 17, 19, 25, s[1]); qL(7, 17, 14, 19, s[2]);
+  if (wx === "clear" || wx === "mostly") { qL(8.5, 10.5, 25, 29, "#FBBF24"); qL(8.5, 10.5, 28.5, 29, "#FDE68A"); }
+  if (wx === "mostly") { qL(11, 16, 18, 20, "#F3F4F6"); qL(12, 14.5, 20, 21, "#FFFFFF"); }
+  if (wx === "cloudy") { qL(8.5, 10, 26, 29, "#FCD34D"); qL(9.5, 15, 23.5, 25.5, "#E5E7EB"); qL(10.5, 13, 25.5, 26.5, "#F3F4F6"); qL(11.5, 17, 18.5, 20.5, "#CBD5E1"); qL(7, 10.5, 15.5, 17, "#CBD5E1"); }
+  if (wx === "stormy") { qL(7, 17, 26, 30, "#1E293B"); for (g = 7.5, i = 0; g < 16.8; g += 1.5, i++) qL(g, g + 0.5, 15 + (i % 3) * 2, 18 + (i % 3) * 2, "#93C5FD"); qL(12, 12.5, 22, 26, "#FDE047"); qL(12.5, 13.5, 21, 22, "#FDE047"); qL(13, 13.5, 18, 21, "#FDE047"); }
+  if (wx === "night") { qL(8.5, 10.5, 25, 28, "#F1F5F9"); qL(8.5, 9.5, 26.5, 28, s[0]); [[14, 28], [16, 24], [11.5, 21], [15, 17], [9, 16]].forEach(function (q) { qL(q[0], q[0] + 0.5, q[1], q[1] + 1, "#F8FAFC"); }); }
+  qL(11.75, 12.25, 14, 30, T.trim); qL(7, 17, 21.5, 22.5, T.trim);
+  box(0, 6, 12, 1.5, 12, 1, "#3A4252", T.trim2, T.trim2);
+  // art, right wall
+  qR(3, 10, 16, 27, "#1F2937"); qR(3.5, 9.5, 16.5, 26.5, "#93C5FD"); qR(3.5, 6.5, 16.5, 20, "#475569"); qR(5.5, 8.5, 16.5, 22.5, "#64748B"); qR(8, 9, 23.5, 25, "#FDE68A");
+  // shelf
+  box(13, 0, 27, 11, 2.5, 1, T.deskTop, T.desk, "#6B4D35");
+  ["#60A5FA", "#F87171", "#FDE047", "#34D399"].forEach(function (c, k) { box(13.6 + k * 1.6, 0.4, 28, 1.1, 1.8, [5, 4, 6, 4.5][k], kMix(c, "#FFFFFF", 0.2), c, kDark(c, 0.75)); });
+  box(21, 0.5, 28, 2, 1.5, 3, "#FDE68A", "#FACC15", "#CA8A04");
+  // corner piece, back corner
+  stamp(r, BEANBAG, 50, 33, "#14B8A6");
+  // desk
+  box(12.3, 0.2, 0, 1, 1, 10, T.desk, T.desk, "#6B4D35"); box(22.7, 0.2, 0, 1, 1, 10, T.desk, T.desk, "#6B4D35");
+  box(12.3, 4.8, 0, 1, 1, 10, T.desk, T.desk, "#6B4D35"); box(22.7, 4.8, 0, 1, 1, 10, T.desk, T.desk, "#6B4D35");
+  box(18, 0.3, 6, 5, 5, 4, "#8B6646", "#6B4D35", "#5B4030");
+  box(12, 0, 10, 12, 6, 1.5, T.deskTop, T.desk, "#6B4D35");
+  // desk items
+  box(18, 0.8, 11.5, 1, 0.6, 2, "#334155", "#334155", "#1F2937");
+  box(14.5, 0.6, 13.5, 8, 0.8, 7, "#475569", "#334155", "#1F2937");
+  qY(1.4, 15, 22, 14.2, 20, "#0F1A2A");
+  if (o.st === "thinking") [16.3, 18, 19.7].forEach(function (a) { qY(1.4, a, a + 0.9, 16.5, 18, o.accent); });
+  else [[15.6, 2], [16.8, 3.5], [18, 1.5], [19.2, 4.5], [20.4, 3]].forEach(function (b, k) { qY(1.4, b[0], b[0] + 0.7, 14.8, 14.8 + b[1], k === 3 ? o.accent : "#7DD3FC"); });
+  box(12.8, 3.6, 11.5, 1.3, 1.3, 2, "#E2E8F0", "#F1F5F9", "#CBD5E1");
+  box(22, 1.2, 11.5, 1.6, 1.6, 0.6, "#475569", "#334155", "#1F2937"); box(22.5, 1.7, 12.1, 0.6, 0.6, 6, "#475569", "#334155", "#334155"); box(21.2, 1, 18, 2.8, 2.4, 1.6, "#FCD34D", T.lamp, "#B45309");
+  // rug, stool, KIP, pet, plant
+  qF(6, 8, 23, 21, T.rug2); qF(7, 9, 22, 20, T.rug);
+  box(16, 9, 0, 4, 4, 4.5, "#4B5366", T.chair, "#353B48");
+  kPush(r, kSprite(o.c, o.m.pose, o.m.mood, ["beanie", "round", "scarf", "earbuds"]), 71, 49);
+  cat(r, 50, 64, "#F59E0B");
+  plant(r, 24, 59, "tall");
+  if (night) { poly(r, [P(-2, -2, Hw), P(N, -2, Hw), P(N, N, -4), P(-2, N, -4)], "rgba(6,8,24,0.4)"); poly(r, [P(20, 0.5, 18), P(25, 0.5, 18), P(26, 7, 11.5), P(18, 7, 11.5)], "rgba(253,224,71,0.16)"); qY(1.4, 15, 22, 14.2, 20, "rgba(125,211,252,0.18)"); }
+  return { sc: pic(r, 130, 104, 3), aria: "Isometric pixel room floating on the dark: KIP on a stool at the desk, " + (o.st === "thinking" ? "typing" : "turned round to answer") + "; window shows " + wx + " weather" };
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    var c = this.props.kipColor ?? "#FB7185", st = this.props.stage ?? "thinking", m = STAGE[st] || STAGE.thinking, wx = this.props.weather ?? "cloudy", accent = accentOf(c);
+    var v = boardVals({ c: c, m: m, wx: wx, accent: accent, st: st, props: this.props });
+    v.accent = accent; v.isThinking = st === "thinking"; v.isAnswering = st === "answering"; v.stageLabel = st === "thinking" ? "KIP THINKING" : "KIP ANSWERING";
+    return v;
+  }
+}
+</script>
+</body>
+</html>

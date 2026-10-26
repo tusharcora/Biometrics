@@ -1,5 +1,5 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachMemoryScreen } from '../../src/screens/CoachMemoryScreen';
 import {
@@ -229,20 +229,37 @@ describe('CoachMemoryScreen', () => {
   });
 });
 
-describe('CoachMemoryScreen: character', () => {
-  it("shows the user's character on the empty state", async () => {
-    (listCoachMemory as jest.Mock).mockResolvedValue([]);
-    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'boba' }));
-    await utils.findByTestId('coach-memory-empty');
-
-    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:boba:idle:40:playing:none');
+describe('CoachMemoryScreen: KIP', () => {
+  it('introduces what KIP remembers', async () => {
+    const s = render(<CoachMemoryScreen />);
+    await s.findByTestId('memory-entry-g1');
+    expect(s.getByText('Things you told me that help me answer. Only you can see them, and you can delete any of them.')).toBeTruthy();
+    expect(s.getByTestId('coach-memory-intro-kip', HIDDEN_OK)).toBeTruthy();
   });
 
-  it("shows the user's character when the coach is unavailable", async () => {
-    (listCoachMemory as jest.Mock).mockRejectedValue(new CoachDisabledError());
-    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'boba' }));
-    await utils.findByTestId('coach-memory-unavailable');
+  it('shows your KIP on the empty state, saying what KIP remembers', async () => {
+    (listCoachMemory as jest.Mock).mockResolvedValue([]);
+    const s = render(<CoachMemoryScreen />);
+    const empty = await s.findByTestId('coach-memory-empty');
 
-    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:boba:idle:48:playing:none');
+    expect(s.getByTestId('coach-memory-kip', HIDDEN_OK)).toBeTruthy();
+    expect(empty).toHaveTextContent(/^.*KIP only remembers your training goals/);
+  });
+
+  it('shows your KIP when coaching is unavailable', async () => {
+    (listCoachMemory as jest.Mock).mockRejectedValue(new CoachDisabledError());
+    const s = render(<CoachMemoryScreen />);
+    await s.findByTestId('coach-memory-unavailable');
+
+    expect(s.getByTestId('coach-memory-kip', HIDDEN_OK)).toBeTruthy();
+    expect(s.getByText("KIP isn't available right now.")).toBeTruthy();
+  });
+
+  it('names KIP when the memory cannot be loaded', async () => {
+    (listCoachMemory as jest.Mock).mockRejectedValue(new Error('offline'));
+    const s = render(<CoachMemoryScreen />);
+
+    expect(await s.findByTestId('coach-memory-error')).toHaveTextContent("What KIP remembers couldn't be loaded.");
+    expect(s.getByTestId('coach-memory-kip', HIDDEN_OK)).toBeTruthy();
   });
 });

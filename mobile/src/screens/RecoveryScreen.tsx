@@ -2,10 +2,7 @@ import React, { useContext, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import { useCharacter } from '../characters/CharacterContext';
-import { useScreenFocused } from '../characters/useScreenFocused';
-import { characterInfo } from '../components/characters/registry';
-import { AskCoachBar } from '../components/coach/AskCoachBar';
+import { AskKipBar } from '../components/coach/AskKipBar';
 import { RecoveryCalendar } from '../components/recovery/RecoveryCalendar';
 import { RecoveryHeader } from '../components/recovery/RecoveryHeader';
 import { RecoveryHero } from '../components/recovery/RecoveryHero';
@@ -21,7 +18,8 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { recoveryQuestion } from '../lib/coachPrompts';
-import { buildingCopy, buildRecoverySummary, headerSubtitle, RECOVERY_COPY } from '../lib/recoveryCopy';
+import { buildingCopy, buildRecoverySummary, headerSubtitle, RECOVERY_COPY, weatherFor } from '../lib/recoveryCopy';
+import { sceneMoodForWeather } from '../lib/home/scene';
 import { pickColdStartProgress } from '../lib/scoreInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useRecoveryPage } from '../lib/useRecoveryPage';
@@ -41,9 +39,6 @@ export function RecoveryScreen() {
   const [viewMonth, setViewMonth] = useState<string | null>(null);
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
-  const focused = useScreenFocused();
-  const { characterId } = useCharacter();
-  const coachName = characterInfo(characterId).name;
 
   const header = (
     <RecoveryHeader
@@ -126,9 +121,10 @@ export function RecoveryScreen() {
         ) : null}
       </ScrollView>
       {coachRoute ? (
-        <AskCoachBar
-          label={past ? RECOVERY_COPY.askPast(coachName) : RECOVERY_COPY.askToday(coachName)}
-          focused={focused}
+        <AskKipBar
+          label={past ? RECOVERY_COPY.askPast : RECOVERY_COPY.askToday}
+          // The day's mood, from the weather the hero shows.
+          mood={sceneMoodForWeather(weatherFor(page.score?.score ?? null, page.state, page.bands))}
           onPress={() => navigateToCoachEntry(navigation, coachRoute, recoveryQuestion({ state: page.state, isToday: page.isToday, date: page.date }))}
         />
       ) : null}

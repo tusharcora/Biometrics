@@ -5,13 +5,14 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
-import { Character } from '../components/characters/Character';
+import { Kip } from '../components/kip/Kip';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
 import { readyCardTitle } from '../lib/recapCopy';
 import { useSocialUnreadCount } from '../lib/socialStore';
 import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { COLORS, MOTION } from '../theme';
 import {
   FLOATING_BAR_HEIGHT,
@@ -29,8 +30,8 @@ const INDICATOR_WIDTH = 20;
 const INDICATOR_HEIGHT = 3;
 // The bar has a 1 dp border, so its content area is 2 dp shorter.
 const SLOT_HEIGHT = FLOATING_BAR_HEIGHT - 2;
-// Small enough to sit inside the lower bar without crowding its icons.
-const HUB_CHARACTER_SIZE = 52;
+// The hub KIP's opacity while the coach is off or its status unknown.
+export const HUB_DIMMED_OPACITY = 0.45;
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
@@ -53,11 +54,11 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const ring = useStoryRing(scheme);
   // Incoming requests + unseen stickers; 0 until the Social home has loaded (and on an older backend).
   const socialUnread = useSocialUnreadCount();
+  const mine = useMyKipColour();
 
   const activeName = state.routes[state.index]?.name ?? 'Home';
-  // The hub character always idles, on every tab (spec §1, Performance). It is
-  // only dimmed while the coach is off or its status unknown, which every coach
-  // entry treats the same way.
+  // The hub is your KIP resting, on every tab. It is only dimmed while the coach
+  // is off or its status unknown, which every coach entry treats the same way.
   const hubDimmed = !status || !status.enabled;
   const target = activeIndicatorTarget(activeName);
 
@@ -165,7 +166,9 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 style={{ height: SLOT_HEIGHT }}
               >
                 {isHub ? (
-                  <Character testID="hub-character" mood="idle" size={HUB_CHARACTER_SIZE} dimmed={hubDimmed} />
+                  <View style={{ opacity: hubDimmed ? HUB_DIMMED_OPACITY : 1 }}>
+                    <Kip testID="hub-character" colour={mine} pose="rest" mood="idle" scale={2} />
+                  </View>
                 ) : (
                   <View className="items-center" style={{ gap: 3 }}>
                     {ringed ? (

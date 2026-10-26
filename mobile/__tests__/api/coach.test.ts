@@ -14,7 +14,6 @@ import {
   fetchLatestConversation,
   revokeCoachConsent,
   sendCoachMessage,
-  setCoachPersona,
   setCoachThinking,
 } from '../../src/api/coach';
 
@@ -62,7 +61,6 @@ describe('fetchCoachStatus', () => {
       ...status,
       engine: 'local',
       engines: { hosted: { available: false, consented: false, consent: null } },
-      thinkingAttachment: 'bulb',
       thinkingText: 'steps',
     });
     expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/me/coach/status', expect.anything());
@@ -88,7 +86,6 @@ describe('fetchCoachStatus', () => {
       personas: status.personas,
       engine: 'local',
       engines: { hosted: { available: false, consented: false, consent: null } },
-      thinkingAttachment: 'bulb',
       thinkingText: 'steps',
     });
   });
@@ -129,26 +126,32 @@ describe('fetchCoachStatus', () => {
   it('fills the thinking defaults when the server predates them (Review Focus 2)', async () => {
     fetchMock.mockResolvedValueOnce(ok(status));
     const result = await fetchCoachStatus();
-    expect(result.thinkingAttachment).toBe('bulb');
+    expect(result).not.toHaveProperty('thinkingAttachment');
     expect(result.thinkingText).toBe('steps');
   });
 
   it('reads the thinking settings the server sends, even while the coach is off', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, thinkingAttachment: 'gears', thinkingText: 'dialog' }));
+    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, thinkingAttachment: 'gears', thinkingText: 'typewriter' }));
     const result = await fetchCoachStatus();
-    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['gears', 'dialog']);
+    expect(result.thinkingText).toBe('typewriter');
+    expect(result).not.toHaveProperty('thinkingAttachment');
+  });
+
+  it('reads a retired thinking text (an older app chose it) as steps', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, thinkingText: 'dialog' }));
+    expect((await fetchCoachStatus()).thinkingText).toBe('steps');
   });
 
   it('replaces unknown thinking ids with the defaults', async () => {
     fetchMock.mockResolvedValueOnce(ok({ enabled: false, personaId: 'mochi', thinkingAttachment: 'rocket', thinkingText: 42 }));
     const result = await fetchCoachStatus();
-    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['bulb', 'steps']);
+    expect(result.thinkingText).toBe('steps');
   });
 
   it('gives a malformed body the thinking defaults', async () => {
     fetchMock.mockResolvedValueOnce(ok('nope'));
     const result = await fetchCoachStatus();
-    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['bulb', 'steps']);
+    expect(result.thinkingText).toBe('steps');
   });
 });
 
@@ -174,25 +177,14 @@ describe('consent', () => {
   });
 });
 
-describe('setCoachPersona', () => {
-  it('PUTs the persona id', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ personaId: 'kit' }));
-    await expect(setCoachPersona('kit')).resolves.toEqual({ personaId: 'kit' });
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api.example.com/me/coach/persona');
-    expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ personaId: 'kit' });
-  });
-});
-
 describe('setCoachThinking', () => {
-  it('PUTs only the settings given', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ thinkingAttachment: 'gears', thinkingText: 'steps' }));
-    await expect(setCoachThinking({ attachment: 'gears' })).resolves.toEqual({ thinkingAttachment: 'gears', thinkingText: 'steps' });
+  it('PUTs the thinking text', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ thinkingText: 'shimmer' }));
+    await expect(setCoachThinking({ text: 'shimmer' })).resolves.toEqual({ thinkingText: 'shimmer' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.com/me/coach/thinking');
     expect(init.method).toBe('PUT');
-    expect(init.body).toBe(JSON.stringify({ attachment: 'gears' }));
+    expect(init.body).toBe(JSON.stringify({ text: 'shimmer' }));
   });
 });
 

@@ -2,10 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import { useCharacter } from '../characters/CharacterContext';
-import { useScreenFocused } from '../characters/useScreenFocused';
-import { characterInfo } from '../components/characters/registry';
-import { AskCoachBar } from '../components/coach/AskCoachBar';
+import { AskKipBar } from '../components/coach/AskKipBar';
 import { BedtimeGoalRow } from '../components/sleep/BedtimeGoalRow';
 import { BedtimeToWakeCard, type SleepRange } from '../components/sleep/BedtimeToWakeCard';
 import { NightCards } from '../components/sleep/NightCards';
@@ -41,9 +38,6 @@ export function SleepScreen() {
   const [range, setRange] = useState<SleepRange>('week');
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
-  const focused = useScreenFocused();
-  const { characterId } = useCharacter();
-  const coachName = characterInfo(characterId).name;
 
   // Tapping the night already shown does nothing (no params churn, no scroll).
   const select = (d: string) => {
@@ -150,9 +144,9 @@ export function SleepScreen() {
         <BedtimeGoalRow goal={page.goal} reminder={page.reminder} onPress={() => navigation.navigate('BedtimeGoal')} onRetry={page.reloadGoal} />
       </ScrollView>
       {coachRoute ? (
-        <AskCoachBar
-          label={askLabel(coachName, isLastNight)}
-          focused={focused}
+        <AskKipBar
+          label={askLabel(isLastNight)}
+          mood="sleepy"
           onPress={() => navigateToCoachEntry(navigation, coachRoute, sleepQuestion(date, isLastNight, hasNight))}
         />
       ) : null}

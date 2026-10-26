@@ -207,8 +207,8 @@ describe('info sheet', () => {
 
 describe('ask and fixed strings', () => {
   it('ask labels', () => {
-    expect(askLabel('Axo', true)).toBe('Ask Axo about last night');
-    expect(askLabel('Axo', false)).toBe('Ask Axo about this night');
+    expect(askLabel(true)).toBe('Ask KIP about last night');
+    expect(askLabel(false)).toBe('Ask KIP about this night');
   });
   it('sleep questions name the night and carry no numbers from the page', () => {
     expect(sleepQuestion(TODAY, true, true)).toBe('How was my sleep last night?');

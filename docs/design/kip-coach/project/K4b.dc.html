@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>K4b · Decorate mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.muted{color:rgb(155,157,166)}
+.slot{position:absolute;font-family:'Silkscreen',monospace;font-size:8px;line-height:10px;letter-spacing:1px;padding:3px 5px;border-radius:6px;background:rgba(10,11,14,.78);border:1px dashed rgba(255,255,255,.45);color:rgb(245,245,244);white-space:nowrap;cursor:pointer}
+.ring{position:absolute;border:2px dashed rgb(245,245,244);border-radius:8px;box-sizing:border-box;pointer-events:none}
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:3px;border-radius:10px;background:rgb(28,31,38)}
+.seg button{height:36px;font-size:14px}
+.cat{height:36px;padding:0 12px;font-size:13px}
+.item{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px 8px;border-radius:12px;background:rgb(20,22,27);border:1px solid rgb(36,39,46);cursor:pointer;color:rgb(245,245,244);font-family:'Geist',system-ui,sans-serif;min-height:120px;box-sizing:border-box}
+.ico{height:52px;display:flex;align-items:center;justify-content:center}
+.nm{font-size:13px;font-weight:500;text-align:center}
+.tag{font-family:'Silkscreen',monospace;font-size:8px;line-height:10px;letter-spacing:1px;text-transform:uppercase}
+.lock{position:absolute;right:6px;top:6px}
+</style>
+</helmet>
+<div style="width: 390px; height: 1180px; box-sizing: border-box; overflow: hidden; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; padding-top: 50px">
+
+  <div style="display: flex; align-items: center; gap: 8px; padding: 4px 16px 10px">
+    <a href="K4.dc.html" class="b ol" style="height: 40px; padding: 0 14px; font-size: 14px">Cancel</a>
+    <h1 style="flex: 1; margin: 0; text-align: center; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 18px; letter-spacing: 1px">DECORATE</h1>
+    <a href="K4.dc.html" class="b df" style="height: 40px; padding: 0 16px; font-size: 14px">Done</a>
+  </div>
+
+  <div style="position: relative; width: 390px; height: 240px; flex: none; overflow: hidden">
+    <svg role="img" aria-label="KIP's room with the item being previewed" width="{{rm.w}}" height="{{rm.h}}" shape-rendering="crispEdges" style="position: absolute; left: 0; top: 0"><sc-for list="{{rm.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg>
+    <sc-if value="{{showRing}}" hint-placeholder-val="{{ true }}"><span class="ring" style="{{ring}}"></span></sc-if>
+    <sc-for list="{{slots}}" as="s" hint-placeholder-count="9"><button class="slot" aria-label="{{s.aria}}" style="{{s.pos}}" onClick="{{s.go}}">+ {{s.name}}</button></sc-for>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid rgb(30,33,40)">
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span class="label" style="color: {{infoColor}}">{{infoLabel}}</span><span style="font-size: 14px">{{infoText}}</span></span>
+    <sc-if value="{{infoOwned}}" hint-placeholder-val="{{ true }}"><button class="b ol" style="height: 36px; padding: 0 12px; font-size: 13px" onClick="{{reset}}">Undo</button></sc-if>
+  </div>
+
+  <div style="padding: 12px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <div class="seg" role="tablist" aria-label="What to decorate">
+      <button class="b {{roomTabCls}}" role="tab" aria-selected="{{isRoom}}" onClick="{{toRoom}}">Room</button>
+      <button class="b {{kipTabCls}}" role="tab" aria-selected="{{isKip}}" onClick="{{toKip}}">KIP</button>
+      <button class="b {{setsTabCls}}" role="tab" aria-selected="{{isSets}}" onClick="{{toSets}}">Sets</button>
+    </div>
+    <sc-if value="{{isRoom}}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{cats}}" as="c" hint-placeholder-count="12"><button class="b cat {{c.cls}}" aria-pressed="{{c.on}}" onClick="{{c.go}}">{{c.name}}</button></sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{isSets}}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{sets}}" as="st" hint-placeholder-count="6">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgb(20,22,27); border: 1px solid rgb(36,39,46)">
+            <span style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 36px; height: 36px; flex: none; border-radius: 8px; overflow: hidden"><span style="background: {{st.c1}}"></span><span style="background: {{st.c2}}"></span><span style="background: {{st.c3}}"></span><span style="background: {{st.c4}}"></span></span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{st.name}}</span><span class="muted" style="font-size: 12px">{{st.n}} pieces · {{st.unlock}}</span></span>
+            <button class="b {{st.cls}}" style="height: 36px; padding: 0 12px; font-size: 13px">{{st.cta}}</button>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="6">
+        <button class="item" aria-label="{{it.aria}}" style="{{it.sel}}" onClick="{{it.go}}">
+          <sc-if value="{{it.locked}}" hint-placeholder-val="{{ false }}"><svg class="lock" width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="1" width="6" height="1" fill="#9B9DA6"></rect><rect x="2" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="9" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="1" y="5" width="10" height="6" fill="#9B9DA6"></rect><rect x="5" y="7" width="2" height="2" fill="#14161B"></rect></svg></sc-if>
+          <span class="ico" style="{{it.dim}}"><svg aria-hidden="true" width="{{it.ic.w}}" height="{{it.ic.h}}" viewBox="{{it.ic.vb}}" shape-rendering="crispEdges"><sc-for list="{{it.ic.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span>
+          <span class="nm">{{it.name}}</span>
+          <span class="tag" style="color: {{it.tagColor}}">{{it.tag}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin: 18px 16px 0; padding: 16px; border-radius: 22px; background: rgb(20,22,27); border: 1px solid rgb(30,33,40); display: flex; flex-direction: column; gap: 10px">
+    <span class="label">How new things arrive</span>
+    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 20px">
+      <span><b style="font-weight: 600">Badge families.</b> <span class="muted">Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels I to V.</span></span>
+      <span><b style="font-weight: 600">Any family.</b> <span class="muted">Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.</span></span>
+      <span><b style="font-weight: 600">Recaps and buddies.</b> <span class="muted">Reading weekly recaps and cheering buddies add decor and whole sets.</span></span>
+      <span class="muted" style="font-size: 13px">Nothing is sold. The starter room is yours from day one, and items are never taken away.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#2A2F3A"]},"$preview":{"width":390,"height":1180}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+var KPOSES = { rest: {}, wave: { arms: [[12, 9, "s"], [13, 8, "s"]] } };
+var KMOODS = { idle: {}, glance: { eyes: "glance" }, proud: { eyes: "up" } };
+var COS = {
+  "hat.beanie": { front: { at: [4, 2], rows: ["...wW...", ".LLrrrR.", "LrrrrrrR", "ddddddDD"] }, pal: { w: "#F8FAFC", W: "#CBD5E1", r: "#EF4444", L: "#F87171", R: "#B91C1C", d: "#B91C1C", D: "#7F1D1D" } },
+  "hat.cap": { front: { at: [4, 4], rows: [".LbbbbR....", "bbbbbbbbkkk"] }, pal: { b: "#2563EB", L: "#60A5FA", R: "#1E40AF", k: "#1E3A8A" } },
+  "hat.crown": { front: { at: [4, 3], rows: ["y..yy..Y", "LyyyyyyY", "yryyyyrY"] }, pal: { y: "#FACC15", L: "#FDE68A", Y: "#CA8A04", r: "#EF4444" } },
+  "face.shades": { front: { at: [4, 8], rows: ["kgkkkgkk", ".kk..kk."] }, pal: { k: "#0B0B10", g: "#64748B" } },
+  "face.round": { front: { at: [5, 7], rows: ["FFFFFf", "f.ff.f", "ffffff"] }, pal: { F: "#FCD34D", f: "#D97706" } },
+  "neck.scarf": { front: { at: [3, 10], rows: ["LssssssssS", ".ddddddLs.", ".......Ls.", ".......dd."] }, pal: { L: "#F87171", s: "#DC2626", S: "#991B1B", d: "#991B1B" } },
+  "head.phones": { front: { at: [3, 5], rows: ["..kkkkkk..", ".k......k.", "cc......cc", "cC......cC", "cc......cc"] }, pal: { k: "#1F2937", c: "#38BDF8", C: "#0369A1" } }
+};
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kBlank() { var g = []; for (var i = 0; i < KN; i++) { var r = []; for (var j = 0; j < KN; j++) r.push(null); g.push(r); } return g; }
+function kPut(g, x, y, c) { if (x >= 0 && y >= 0 && x < KN && y < KN && c) g[y][x] = c; }
+function kBuild(body, pn, mn, cos) {
+  var p = kRamp(body), pose = KPOSES[pn] || {}, mood = KMOODS[mn] || {}, g = kBlank(), x, y, c;
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) if (KBASE[y][x] !== ".") g[y][x] = KBASE[y][x];
+  var em = pose.eyes || mood.eyes;
+  KEYES.forEach(function (e) { var q = [e[0], e[1]]; if (em === "up") q = [e[0], e[1] - 1]; else if (em === "glance") q = [e[0] + 1, e[1]]; kPut(g, q[0], q[1], "e"); });
+  (pose.arms || []).forEach(function (a) { if (!g[a[1]][a[0]]) g[a[1]][a[0]] = a[2]; });
+  var out = kBlank();
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) out[y][x] = p[c]; }
+  (cos || []).forEach(function (id) { var it = COS[id]; if (!it) return; var q = it.front; q.rows.forEach(function (row, j) { for (var k = 0; k < row.length; k++) { var L = row[k]; if (L === ".") continue; var X = q.at[0] + k, Y = q.at[1] + j; if (X >= 0 && Y >= 0 && X < KN && Y < KN) out[Y][X] = it.pal[L]; } }); });
+  return out;
+}
+function kCells(cells, ox, oy) { var r = []; for (var y = 0; y < KN; y++) for (var x = 0; x < KN; x++) if (cells[y][x]) r.push([ox + x, oy + y, 1, 1, cells[y][x]]); return r; }
+function pxLayers(rects, u) { var by = {}, order = []; rects.forEach(function (r) { var f = r[4]; if (!by[f]) { by[f] = ""; order.push(f); } by[f] += "M" + r[0] * u + " " + r[1] * u + "h" + r[2] * u + "v" + r[3] * u + "h-" + r[2] * u + "z"; }); return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function R(r, x, y, w, h, c) { r.push([x, y, w, h, c]); }
+var WX = { cloudy: { sky: ["#8592A6", "#A3AEC0"], f: function (r) { R(r, 30, 12, 6, 5, "#FCD34D"); R(r, 12, 14, 14, 4, "#E5E7EB"); R(r, 14, 13, 8, 1, "#F3F4F6"); R(r, 24, 17, 15, 5, "#CBD5E1"); R(r, 26, 16, 9, 1, "#E2E8F0"); R(r, 12, 29, 12, 3, "#CBD5E1"); } } };
+function plant(r, x, y, kind) {
+  if (kind === "tall") { R(r, x, y, 8, 7, "#E5E7EB"); R(r, x - 1, y - 1, 10, 2, "#F8FAFC"); R(r, x + 3, y - 14, 2, 13, "#15803D"); R(r, x - 3, y - 16, 6, 4, "#22C55E"); R(r, x + 4, y - 20, 7, 5, "#16A34A"); R(r, x - 2, y - 10, 5, 3, "#4ADE80"); R(r, x + 5, y - 11, 6, 3, "#22C55E"); return; }
+  if (kind === "cactus") { R(r, x + 1, y + 2, 6, 5, "#C2410C"); R(r, x + 3, y - 7, 3, 9, "#65A30D"); R(r, x + 1, y - 4, 2, 3, "#65A30D"); R(r, x + 6, y - 5, 2, 3, "#65A30D"); R(r, x + 3, y - 8, 2, 1, "#F472B6"); return; }
+  R(r, x, y, 8, 7, "#B45309"); R(r, x - 1, y - 1, 10, 2, "#D97706"); R(r, x + 3, y - 8, 2, 7, "#4ADE80"); R(r, x, y - 6, 3, 2, "#22C55E"); R(r, x + 5, y - 7, 3, 2, "#22C55E"); R(r, x - 1, y - 9, 2, 3, "#16A34A"); R(r, x + 7, y - 10, 2, 3, "#16A34A");
+}
+function room(T, o) {
+  var r = [], W = 130, H = 80, fy = 56, x, y, wx = WX.cloudy;
+  R(r, 0, 0, W, fy, T.wall);
+  if (T.pattern === "stripe") for (x = 2; x < W; x += 8) R(r, x, 0, 2, fy, T.wall2);
+  if (T.pattern === "dots") for (y = 3; y < fy - 4; y += 6) for (x = (y % 12 === 3 ? 2 : 6); x < W; x += 8) R(r, x, y, 1, 1, T.wall2);
+  if (T.pattern === "panel") { R(r, 0, 38, W, 1, T.wall2); for (x = 4; x < W; x += 12) R(r, x, 40, 1, 14, T.wall2); }
+  if (T.neon) R(r, 0, 0, W, 1, T.neon);
+  R(r, 8, 8, 34, 30, T.trim); R(r, 10, 10, 30, 13, wx.sky[0]); R(r, 10, 23, 30, 13, wx.sky[1]); wx.f(r);
+  R(r, 24, 10, 2, 26, T.trim); R(r, 10, 22, 30, 1, T.trim); R(r, 6, 37, 38, 2, T.trim2);
+  if (T.art) { R(r, 52, 12, 18, 14, "#1F2937"); R(r, 53, 13, 16, 12, T.art[0]); R(r, 55, 20, 6, 5, T.art[1]); R(r, 58, 18, 4, 7, T.art[1]); R(r, 64, 15, 2, 2, "#FDE68A"); }
+  if (T.neon) [[57, 14, 2, 1], [61, 14, 2, 1], [56, 15, 8, 2], [57, 17, 6, 1], [58, 18, 4, 1], [59, 19, 2, 1]].forEach(function (q) { R(r, q[0], q[1], q[2], q[3], T.neon); });
+  R(r, 84, 20, 36, 2, T.desk); R(r, 86, 22, 1, 3, T.desk); R(r, 117, 22, 1, 3, T.desk);
+  x = 86; (T.shelf || []).forEach(function (c, i) { var h = [7, 5, 8, 6, 4, 7][i % 6]; R(r, x, 20 - h, 3, h, c); x += 4; });
+  if (T.trophy) { R(r, 112, 14, 4, 4, "#FACC15"); R(r, 113, 18, 2, 2, "#CA8A04"); }
+  if (T.hang) [48, 72].forEach(function (hx) { R(r, hx + 3, 0, 1, 6, "#A3A3A3"); R(r, hx, 6, 7, 4, "#B45309"); R(r, hx - 1, 10, 2, 5, "#22C55E"); R(r, hx + 3, 10, 2, 7, "#16A34A"); R(r, hx + 6, 10, 2, 4, "#4ADE80"); });
+  R(r, 0, fy - 2, W, 2, T.trim2);
+  R(r, 0, fy, W, H - fy, T.floor);
+  for (y = fy + 4; y < H; y += 5) R(r, 0, y, W, 1, T.floor2);
+  for (y = fy; y < H; y += 5) for (x = (y % 10 ? 8 : 20); x < W; x += 24) R(r, x, y, 1, 5, T.floor2);
+  if (T.rug) { R(r, 30, 68, 60, 7, T.rug); R(r, 30, 69, 60, 1, T.rug2); R(r, 30, 73, 60, 1, T.rug2); }
+  if (T.pet) { R(r, 14, 68, 16, 5, T.pet); R(r, 16, 68, 12, 2, kDark(T.pet, 0.7)); }
+  (T.plants || []).forEach(function (p) { plant(r, p[0], p[1], p[2]); });
+  if (T.floorLamp) { R(r, 48, 26, 1, 46, "#94A3B8"); R(r, 45, 22, 7, 4, T.floorLamp); R(r, 46, 72, 5, 1, "#94A3B8"); }
+  R(r, 58, 44, 2, 18, T.chair); R(r, 58, 60, 20, 2, T.chair); R(r, 59, 62, 2, 10, T.chair); R(r, 75, 62, 2, 10, T.chair);
+  R(r, 76, 54, 50, 2, T.deskTop); R(r, 76, 56, 50, 2, T.desk); R(r, 78, 58, 2, 14, T.desk); R(r, 122, 58, 2, 14, T.desk); R(r, 104, 58, 16, 7, T.desk); R(r, 111, 61, 2, 1, "#1F2937");
+  var ix = 89, iy = 39;
+  if (T.setup === "book") { R(r, 88, 50, 22, 4, "#F1F5F9"); R(r, 98, 50, 2, 4, "#CBD5E1"); R(r, 90, 51, 6, 1, "#94A3B8"); R(r, 101, 51, 7, 1, "#94A3B8"); ix = -1; }
+  else if (T.setup === "dual") { R(r, 80, 40, 20, 11, "#1F2937"); R(r, 81, 41, 18, 9, T.screen); R(r, 82, 43, 10, 1, T.screenLine); R(r, 82, 45, 14, 1, T.screenLine); R(r, 89, 51, 2, 3, "#334155"); R(r, 102, 38, 22, 13, "#1F2937"); R(r, 103, 39, 20, 11, T.screen); R(r, 112, 51, 3, 3, "#334155"); ix = 103; }
+  else { R(r, 88, 38, 26, 13, "#1F2937"); R(r, 89, 39, 24, 11, T.screen); R(r, 100, 51, 3, 3, "#334155"); R(r, 96, 53, 11, 1, "#334155"); }
+  if (T.setup !== "book") R(r, 84, 53, 12, 1, "#475569");
+  if (T.mug) { R(r, 79, 50, 3, 4, "#F1F5F9"); R(r, 82, 51, 1, 2, "#F1F5F9"); }
+  if (T.lamp) { R(r, 118, 52, 5, 2, "#334155"); R(r, 120, 44, 1, 8, "#334155"); R(r, 115, 41, 7, 3, T.lamp); R(r, 113, 44, 11, 10, "rgba(253,224,71,0.12)"); }
+  if (T.curtains) { R(r, 5, 5, 40, 1, "#7C5A3E"); R(r, 5, 6, 6, 32, o.tint); R(r, 7, 6, 1, 32, kDark(o.tint, 0.78)); R(r, 39, 6, 6, 32, o.tint); R(r, 41, 6, 1, 32, kDark(o.tint, 0.78)); }
+  if (ix > 0) { var L = T.screenLine; R(r, ix + 2, iy + 2, 10, 1, L); R(r, ix + 2, iy + 4, 16, 1, L); R(r, ix + 2, iy + 6, 8, 1, L); R(r, ix + 2, iy + 8, 13, 1, L); }
+  r = r.concat(o.kip);
+  return { w: W * 3, h: H * 3, layers: pxLayers(r, 3) };
+}
+var STARTER = { wall: "#2A3140", wall2: "#323A4B", pattern: "panel", trim: "#1E2430", trim2: "#191E28", floor: "#5B4636", floor2: "#4A382B", rug: "#475569", rug2: "#334155", desk: "#7C5A3E", deskTop: "#9A7350", chair: "#3F4656", screen: "#0F1A2A", screenLine: "#7DD3FC", setup: "mono", lamp: "#F59E0B", plants: [[2, 64, "fern"]], shelf: ["#60A5FA", "#F87171", "#FDE047"], mug: true };
+function merge(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; for (k in b || {}) o[k] = b[k]; return o; }
+function icon(rects) { var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; rects.forEach(function (q) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0] + q[2]); y1 = Math.max(y1, q[1] + q[3]); }); var w = x1 - x0, h = y1 - y0, s = Math.max(1, Math.floor(48 / Math.max(w, h))); return { w: w * s, h: h * s, vb: x0 + " " + y0 + " " + w + " " + h, layers: pxLayers(rects, 1) }; }
+function plantIcon(kind) { var r = []; plant(r, 4, 22, kind); return r; }
+var SLOTS = {
+  art: { name: "ART", tag: [160, 30], ring: [150, 30, 66, 54] }, window: { name: "WINDOW", tag: [44, 66], ring: [21, 21, 108, 99] },
+  shelf: { name: "SHELF", tag: [276, 8], ring: [249, 24, 114, 45] }, lamp: { name: "LAMP", tag: [334, 96], ring: [336, 117, 36, 48] },
+  desk: { name: "DESK", tag: [268, 92], ring: [234, 108, 112, 60] }, plant: { name: "PLANT", tag: [2, 108], ring: [0, 120, 40, 96] },
+  rug: { name: "RUG", tag: [150, 212], ring: [87, 198, 186, 30] }, pet: { name: "PET", tag: [40, 180], ring: [39, 198, 54, 24] },
+  wall: { name: "WALLPAPER", tag: [130, 6], ring: [0, 0, 390, 165] }, floor: { name: "FLOOR", tag: [300, 218], ring: [0, 168, 390, 72] },
+  corner: { name: "CORNER", tag: [128, 96], ring: [132, 60, 42, 156] }, desk_item: { name: "DESK ITEM", tag: [200, 112], ring: [228, 141, 24, 24] }
+};
+// Tray categories, one per room slot (schema: wallpaper, floor, art, window, shelf, desk, desk_item, plant, lamp, corner, rug, pet).
+var CATS = ["Wallpaper", "Floor", "Art", "Window", "Shelf", "Desk", "Desk item", "Plant", "Lamp", "Corner", "Rug", "Pet"];
+var CAT_OF = { wall: "Wallpaper", floor: "Floor", art: "Art", window: "Window", shelf: "Shelf", desk: "Desk", desk_item: "Desk item", plant: "Plant", lamp: "Lamp", corner: "Corner", rug: "Rug", pet: "Pet" };
+var ITEMS = {
+  Wallpaper: [
+    { name: "Panel", slot: "wall", own: true, equipped: true, ap: {}, ic: [[0, 0, 16, 16, "#2A3140"], [0, 9, 16, 1, "#323A4B"], [4, 10, 1, 6, "#323A4B"], [12, 10, 1, 6, "#323A4B"]] },
+    { name: "Dots", slot: "wall", own: true, ap: { pattern: "dots", wall2: "#4B5568" }, ic: [[0, 0, 16, 16, "#2A3140"], [2, 2, 1, 1, "#4B5568"], [10, 2, 1, 1, "#4B5568"], [6, 8, 1, 1, "#4B5568"], [14, 8, 1, 1, "#4B5568"], [2, 14, 1, 1, "#4B5568"], [10, 14, 1, 1, "#4B5568"]] },
+    { name: "Tinted stripes", slot: "wall", own: true, ap: { pattern: "stripe", wall2: "#343D50" }, ic: [[0, 0, 16, 16, "#2A3140"], [2, 0, 2, 16, "#3B4558"], [10, 0, 2, 16, "#3B4558"]] },
+    { name: "Shoji paper", slot: "wall", own: false, unlock: "Steady bedtime · III", ap: {}, ic: [[0, 0, 16, 16, "#EDE6D3"], [0, 0, 1, 16, "#6B4F3A"], [6, 0, 1, 16, "#6B4F3A"], [12, 0, 1, 16, "#6B4F3A"], [0, 4, 16, 1, "#6B4F3A"], [0, 8, 16, 1, "#6B4F3A"], [0, 12, 16, 1, "#6B4F3A"]] }
+  ],
+  Floor: [
+    { name: "Dark oak", slot: "floor", own: true, equipped: true, ap: {}, ic: [[0, 0, 24, 14, "#5B4636"], [0, 4, 24, 1, "#4A382B"], [0, 9, 24, 1, "#4A382B"], [8, 0, 1, 4, "#4A382B"], [16, 5, 1, 4, "#4A382B"]] },
+    { name: "White tiles", slot: "floor", own: true, ap: { floor: "#E5E7EB", floor2: "#CBD5E1" }, ic: [[0, 0, 24, 14, "#E5E7EB"], [0, 6, 24, 1, "#CBD5E1"], [6, 0, 1, 14, "#CBD5E1"], [12, 0, 1, 14, "#CBD5E1"], [18, 0, 1, 14, "#CBD5E1"]] },
+    { name: "Light oak", slot: "floor", own: false, unlock: "Read 8 weekly recaps", ap: { floor: "#D4B996", floor2: "#C2A680" }, ic: [[0, 0, 24, 14, "#D4B996"], [0, 4, 24, 1, "#C2A680"], [0, 9, 24, 1, "#C2A680"], [8, 0, 1, 4, "#C2A680"], [16, 5, 1, 4, "#C2A680"]] },
+    { name: "Tatami", slot: "floor", own: false, unlock: "Steady bedtime · III", ap: {}, ic: [[0, 0, 24, 14, "#C9C08A"], [0, 0, 24, 1, "#3F6212"], [12, 0, 1, 14, "#3F6212"], [4, 1, 1, 13, "#BDB37A"], [8, 1, 1, 13, "#BDB37A"], [16, 1, 1, 13, "#BDB37A"], [20, 1, 1, 13, "#BDB37A"]] }
+  ],
+  Art: [
+    { name: "No art", slot: "art", own: true, equipped: true, ap: {}, ic: [[0, 0, 18, 14, "#2A3140"], [0, 0, 18, 1, "#323A4B"]] },
+    { name: "Mountain print", slot: "art", own: true, ap: { art: ["#93C5FD", "#15803D"] }, ic: [[0, 0, 18, 14, "#1F2937"], [1, 1, 16, 12, "#93C5FD"], [3, 8, 6, 5, "#15803D"], [6, 6, 4, 7, "#15803D"], [12, 3, 2, 2, "#FDE68A"]] },
+    { name: "Neon heart", slot: "art", own: false, unlock: "Steady bedtime · II", ap: { neon: "#F472B6" }, ic: [[1, 0, 2, 1, "#F472B6"], [5, 0, 2, 1, "#F472B6"], [0, 1, 8, 2, "#F472B6"], [1, 3, 6, 1, "#F472B6"], [2, 4, 4, 1, "#F472B6"], [3, 5, 2, 1, "#F472B6"]] },
+    { name: "Framed medal", slot: "art", own: false, unlock: "Best recovery week · III", ap: {}, ic: [[0, 0, 14, 16, "#1F2937"], [1, 1, 12, 14, "#334155"], [5, 2, 1, 6, "#DC2626"], [8, 2, 1, 6, "#2563EB"], [4, 8, 6, 6, "#FACC15"]] }
+  ],
+  Window: [
+    { name: "Plain frame", slot: "window", own: true, equipped: true, ap: {}, ic: [[0, 0, 34, 30, "#1E2430"], [2, 2, 30, 26, "#A3AEC0"], [16, 2, 2, 26, "#1E2430"]] },
+    { name: "Curtains", slot: "window", own: true, ap: { curtains: true }, ic: [[0, 0, 40, 1, "#7C5A3E"], [0, 1, 6, 30, "#FB7185"], [34, 1, 6, 30, "#FB7185"], [6, 3, 28, 26, "#A3AEC0"]] },
+    { name: "Hanging pots", slot: "window", own: false, unlock: "Sleep goal · III", progress: "level II now", ap: { hang: true }, ic: [[3, 0, 1, 6, "#A3A3A3"], [0, 6, 7, 4, "#B45309"], [-1, 10, 2, 5, "#22C55E"], [3, 10, 2, 7, "#16A34A"], [6, 10, 2, 4, "#4ADE80"]] }
+  ],
+  Shelf: [
+    { name: "Books", slot: "shelf", own: true, equipped: true, ap: {}, ic: [[0, 1, 2, 7, "#60A5FA"], [2, 0, 2, 8, "#F87171"], [4, 2, 2, 6, "#FDE047"]] },
+    { name: "Bronze trophy", slot: "shelf", own: true, ap: { trophy: true }, ic: [[0, 0, 6, 1, "#D97706"], [0, 1, 6, 3, "#B45309"], [1, 4, 4, 1, "#92400E"], [2, 5, 2, 2, "#92400E"], [1, 7, 4, 1, "#92400E"]] },
+    { name: "Lucky cat", slot: "shelf", own: false, unlock: "Best recovery week · II", ap: {}, ic: [[0, 0, 7, 4, "#F8FAFC"], [0, 3, 7, 6, "#F8FAFC"], [7, -1, 1, 3, "#F8FAFC"], [2, 2, 1, 1, "#1F2937"], [4, 2, 1, 1, "#1F2937"], [0, 4, 7, 1, "#DC2626"], [2, 6, 3, 2, "#FACC15"]] }
+  ],
+  Desk: [
+    { name: "Monitor", slot: "desk", own: true, equipped: true, ap: {}, ic: [[0, 0, 26, 13, "#1F2937"], [1, 1, 24, 11, "#0F1A2A"], [3, 3, 10, 1, "#7DD3FC"], [3, 5, 16, 1, "#7DD3FC"], [12, 13, 3, 3, "#334155"]] },
+    { name: "Notebook", slot: "desk", own: true, ap: { setup: "book" }, ic: [[0, 0, 22, 4, "#F1F5F9"], [10, 0, 2, 4, "#CBD5E1"], [2, 1, 6, 1, "#94A3B8"], [13, 1, 7, 1, "#94A3B8"]] },
+    { name: "Two screens", slot: "desk", own: false, unlock: "Best recovery week · IV", ap: { setup: "dual" }, ic: [[0, 2, 20, 11, "#1F2937"], [1, 3, 18, 9, "#0F1A2A"], [22, 0, 22, 13, "#1F2937"], [23, 1, 20, 11, "#0F1A2A"]] }
+  ],
+  "Desk item": [
+    { name: "Mug", slot: "desk_item", own: true, equipped: true, ap: {}, ic: [[0, 0, 4, 5, "#F1F5F9"], [4, 1, 1, 3, "#F1F5F9"]] },
+    { name: "Energy can", slot: "desk_item", own: false, unlock: "Every day logged · IV", ap: {}, ic: [[0, 0, 4, 1, "#CBD5E1"], [0, 1, 4, 6, "#16A34A"], [0, 3, 4, 1, "#111827"], [1, 4, 2, 1, "#FDE047"], [0, 7, 4, 1, "#CBD5E1"]] },
+    { name: "Matcha bowl", slot: "desk_item", own: false, unlock: "Steady bedtime · IV", ap: {}, ic: [[0, 2, 8, 1, "#65A30D"], [0, 3, 8, 2, "#57534E"], [1, 5, 6, 1, "#44403C"], [2, 6, 4, 1, "#44403C"]] }
+  ],
+  Plant: [
+    { name: "Fern", slot: "plant", own: true, equipped: true, ap: {}, ic: plantIcon("fern") },
+    { name: "Monstera", slot: "plant", own: true, ap: { plants: [[2, 64, "tall"]] }, ic: plantIcon("tall") },
+    { name: "Cactus", slot: "plant", own: true, ap: { plants: [[2, 64, "cactus"]] }, ic: plantIcon("cactus") },
+    { name: "Bonsai", slot: "plant", own: false, unlock: "Steady bedtime · III", ap: {}, ic: [[2, 10, 12, 4, "#7C2D12"], [7, 4, 2, 6, "#78350F"], [2, 1, 6, 4, "#15803D"], [8, 0, 7, 4, "#16A34A"]] },
+    { name: "Glow fern", slot: "plant", own: false, unlock: "Best recovery week · V", ap: {}, ic: [[3, 20, 8, 7, "#1E293B"], [6, 12, 2, 7, "#67E8F9"], [3, 14, 3, 2, "#22D3EE"], [8, 13, 3, 2, "#22D3EE"], [2, 11, 2, 3, "#A5F3FC"], [10, 10, 2, 3, "#A5F3FC"]] }
+  ],
+  Lamp: [
+    { name: "Amber lamp", slot: "lamp", own: true, equipped: true, ap: {}, ic: [[0, 0, 7, 3, "#F59E0B"], [5, 3, 1, 8, "#334155"], [3, 11, 5, 2, "#334155"]] },
+    { name: "Mint lamp", slot: "lamp", own: true, ap: { lamp: "#6EE7B7" }, ic: [[0, 0, 7, 3, "#6EE7B7"], [5, 3, 1, 8, "#334155"], [3, 11, 5, 2, "#334155"]] },
+    { name: "Lava lamp", slot: "lamp", own: false, unlock: "Every day logged · IV", ap: {}, ic: [[2, 0, 3, 2, "#334155"], [2, 2, 3, 10, "#7C3AED"], [1, 4, 5, 6, "#7C3AED"], [2, 5, 2, 2, "#F472B6"], [1, 12, 5, 3, "#334155"]] }
+  ],
+  Corner: [
+    { name: "Empty corner", slot: "corner", own: true, equipped: true, ap: {}, ic: [[0, 0, 14, 1, "#334155"], [0, 0, 1, 14, "#334155"]] },
+    { name: "Floor lamp", slot: "corner", own: false, unlock: "Steady bedtime · II", ap: { floorLamp: "#FDE68A" }, ic: [[0, 0, 7, 4, "#FDE68A"], [3, 4, 1, 22, "#94A3B8"], [1, 26, 5, 1, "#94A3B8"]] },
+    { name: "Dumbbell rack", slot: "corner", own: false, unlock: "Step goal · IV", ap: {}, ic: [[0, 0, 1, 20, "#334155"], [11, 0, 1, 20, "#334155"], [0, 6, 12, 1, "#334155"], [1, 3, 2, 3, "#DC2626"], [3, 4, 6, 1, "#94A3B8"], [9, 3, 2, 3, "#DC2626"], [1, 13, 2, 3, "#2563EB"], [3, 14, 6, 1, "#94A3B8"], [9, 13, 2, 3, "#2563EB"], [-1, 20, 14, 1, "#1F2937"]] }
+  ],
+  Rug: [
+    { name: "Slate rug", slot: "rug", own: true, equipped: true, ap: {}, ic: [[0, 0, 30, 7, "#475569"], [0, 1, 30, 1, "#334155"], [0, 5, 30, 1, "#334155"]] },
+    { name: "Red rug", slot: "rug", own: true, ap: { rug: "#9A3B3B", rug2: "#7F2D2D" }, ic: [[0, 0, 30, 7, "#9A3B3B"], [0, 1, 30, 1, "#7F2D2D"], [0, 5, 30, 1, "#7F2D2D"]] },
+    { name: "Rainbow rug", slot: "rug", own: false, unlock: "Any family · level IV", ap: {}, ic: [[0, 0, 30, 1, "#F87171"], [0, 1, 30, 1, "#FB923C"], [0, 2, 30, 1, "#FDE047"], [0, 3, 30, 1, "#4ADE80"], [0, 4, 30, 1, "#60A5FA"], [0, 5, 30, 1, "#A78BFA"], [0, 6, 30, 1, "#F472B6"]] }
+  ],
+  Pet: [
+    { name: "Pet bed", slot: "pet", own: true, ap: { pet: "#F472B6" }, ic: [[0, 4, 16, 5, "#F472B6"], [2, 4, 12, 2, "#BE185D"]] },
+    { name: "Cat on a cushion", slot: "pet", own: false, unlock: "Cheer a buddy 10 times", ap: {}, ic: [[10, 0, 5, 4, "#F59E0B"], [2, 2, 10, 4, "#F59E0B"], [12, 2, 2, 1, "#78350F"], [0, 5, 16, 3, "#7C3AED"]] },
+    { name: "Fish bowl", slot: "pet", own: false, unlock: "Best recovery week · IV", ap: {}, ic: [[2, 0, 10, 1, "#BAE6FD"], [0, 1, 14, 8, "#7DD3FC"], [5, 5, 3, 2, "#FB923C"], [2, 10, 10, 2, "#7C5A3E"]] }
+  ]
+};
+var KITEMS = [
+  { name: "Headphones", own: true, cos: "head.phones" }, { name: "Beanie", own: true, cos: "hat.beanie" }, { name: "Round glasses", own: true, cos: "face.round" },
+  { name: "Scarf", own: true, cos: "neck.scarf" }, { name: "Shades", own: false, cos: "face.shades", unlock: "Best recovery week · III" }, { name: "Cap", own: true, cos: "hat.cap" },
+  { name: "Crown", own: false, cos: "hat.crown", unlock: "Any family · level V" }
+];
+var SETS = [
+  { name: "Cottage", n: 13, unlock: "Read 4 weekly recaps", own: true, c: ["#3B2F4A", "#F9A8D4", "#D4B996", "#C08A5A"] },
+  { name: "Japanese", n: 14, unlock: "Steady bedtime · III", own: false, c: ["#EDE6D3", "#6B4F3A", "#C9C08A", "#3F6212"] },
+  { name: "Home gym", n: 12, unlock: "Step goal · IV", own: false, c: ["#6B7280", "#1F2937", "#DC2626", "#2563EB"] },
+  { name: "Gamer night", n: 12, unlock: "Any family · level IV", own: false, c: ["#140A2A", "#7C3AED", "#22D3EE", "#F472B6"] },
+  { name: "Stargazer", n: 12, unlock: "Steadiest month · V", own: false, c: ["#0F172A", "#F8FAFC", "#7C3AED", "#38BDF8"] },
+  { name: "Library", n: 13, unlock: "Read 12 weekly recaps", own: false, c: ["#6B4F3A", "#5B4636", "#9A3B3B", "#CA8A04"] }
+];
+function ringStyle(q) { return "left: " + q[0] + "px; top: " + q[1] + "px; width: " + q[2] + "px; height: " + q[3] + "px"; }
+
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { tab: "room", cat: "Plant", pick: "Monstera", kpick: "Headphones" }; }
+  renderVals() {
+    var self = this, st = this.state, c = this.props.kipColor ?? "#FB7185", isRoom = st.tab === "room", isSets = st.tab === "sets";
+    if (isSets) {
+      return {
+        rm: room(STARTER, { kip: kCells(kBuild(c, "rest", "glance", []), 61, 45) }), showRing: false, ring: "", slots: [],
+        infoLabel: "Theme sets", infoText: "Apply a whole room in one tap, then swap any piece", infoColor: "rgb(245,245,244)", infoOwned: false,
+        reset: function () {}, isRoom: false, isKip: false, isSets: true,
+        roomTabCls: "", kipTabCls: "", setsTabCls: "df",
+        toRoom: function () { self.setState({ tab: "room" }); }, toKip: function () { self.setState({ tab: "kip" }); }, toSets: function () { self.setState({ tab: "sets" }); },
+        cats: [], items: [],
+        sets: SETS.map(function (s) { return { name: s.name, n: s.n, unlock: s.unlock, c1: s.c[0], c2: s.c[1], c3: s.c[2], c4: s.c[3], cls: s.own ? "df" : "ol", cta: s.own ? "Apply set" : "Preview" }; })
+      };
+    }
+    var list = ITEMS[st.cat] || [], picked = null;
+    list.forEach(function (it) { if (it.name === st.pick) picked = it; });
+    var kp = null; KITEMS.forEach(function (k) { if (k.name === st.kpick) kp = k; });
+    var theme = STARTER, cos = [];
+    if (isRoom && picked && picked.own) theme = merge(STARTER, picked.ap);
+    if (!isRoom && kp && kp.own) cos = [kp.cos];
+    var kipCells = kBuild(c, isRoom ? "rest" : "wave", isRoom ? "glance" : "idle", cos);
+    var info, items;
+    if (isRoom) {
+      info = picked ? (picked.own ? { l: picked.equipped ? "In your room" : "Previewing", t: picked.name + (picked.equipped ? " is already placed" : " in the " + SLOTS[picked.slot].name.toLowerCase() + " spot"), col: "rgb(245,245,244)", own: !picked.equipped } : { l: "Locked", t: picked.name + " · " + picked.unlock + (picked.progress ? " (" + picked.progress + ")" : ""), col: "rgb(155,157,166)", own: false }) : { l: "Pick a spot", t: "Tap a + in the room or an item below", col: "rgb(155,157,166)", own: false };
+      items = list.map(function (it) {
+        var on = it.name === st.pick;
+        return { name: it.name, ic: icon(it.ic), locked: !it.own, tag: it.equipped ? "Placed" : it.own ? "Owned" : it.unlock, tagColor: it.equipped ? "#4ADE80" : it.own ? "rgb(155,157,166)" : "rgb(155,157,166)", dim: it.own ? "" : "opacity: .45", sel: on ? "border: 2px solid rgb(245,245,244)" : "", aria: it.name + (it.own ? (it.equipped ? ", placed" : ", owned. Preview it") : ", locked. " + it.unlock), go: function () { self.setState({ pick: it.name }); } };
+      });
+    } else {
+      info = kp ? (kp.own ? { l: "KIP is wearing", t: kp.name, col: "rgb(245,245,244)", own: true } : { l: "Locked", t: kp.name + " · " + kp.unlock, col: "rgb(155,157,166)", own: false }) : { l: "Dress KIP", t: "Pick an accessory", col: "rgb(155,157,166)", own: false };
+      items = KITEMS.map(function (k) {
+        var on = k.name === st.kpick, g = kBuild(c, "rest", "idle", [k.cos]);
+        var rr = kCells(g, 0, 0).filter(function (q) { return q[1] < 15; });
+        return { name: k.name, ic: { w: 48, h: 45, vb: "0 0 16 15", layers: pxLayers(rr, 1) }, locked: !k.own, tag: k.own ? "Owned" : k.unlock, tagColor: "rgb(155,157,166)", dim: k.own ? "" : "opacity: .45", sel: on ? "border: 2px solid rgb(245,245,244)" : "", aria: k.name + (k.own ? ", owned. Try it on" : ", locked. " + k.unlock), go: function () { self.setState({ kpick: k.name }); } };
+      });
+    }
+    var ringSlot = isRoom && picked ? SLOTS[picked.slot].ring : (!isRoom ? [180, 126, 60, 60] : null);
+    return {
+      rm: room(theme, { kip: kCells(kipCells, 61, 45), tint: c }),
+      showRing: !!ringSlot, ring: ringSlot ? ringStyle(ringSlot) : "",
+      slots: isRoom ? Object.keys(SLOTS).map(function (k) { var s = SLOTS[k]; return { name: s.name, aria: "Decorate the " + s.name.toLowerCase(), pos: "left: " + s.tag[0] + "px; top: " + s.tag[1] + "px", go: function () { self.setState({ cat: CAT_OF[k], pick: null }); } }; }) : [],
+      infoLabel: info.l, infoText: info.t, infoColor: info.col, infoOwned: info.own,
+      reset: function () { self.setState(isRoom ? { pick: null } : { kpick: null }); },
+      isRoom: isRoom, isKip: !isRoom, isSets: false, sets: [],
+      roomTabCls: isRoom ? "df" : "", kipTabCls: isRoom ? "" : "df", setsTabCls: "",
+      toRoom: function () { self.setState({ tab: "room" }); }, toKip: function () { self.setState({ tab: "kip" }); }, toSets: function () { self.setState({ tab: "sets" }); },
+      cats: CATS.map(function (n) { return { name: n, on: n === st.cat, cls: n === st.cat ? "df" : "ol", go: function () { self.setState({ cat: n, pick: null }); } }; }),
+      items: items
+    };
+  }
+}
+</script>
+</body>
+</html>

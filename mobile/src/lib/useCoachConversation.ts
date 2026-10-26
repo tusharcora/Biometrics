@@ -15,6 +15,7 @@ import {
   type MemoryDTO,
   type SendCoachMessageInput,
 } from '../api/coach';
+import { isNetworkError } from '../api/client';
 import { CoachStreamAbortedError, CoachStreamInterruptedError, streamCoachMessage } from '../api/coachStream';
 
 export interface CoachChatMessage {
@@ -49,7 +50,8 @@ export interface CoachTurnError {
   // timeout: it took too long; interrupted: the stream dropped part-way;
   // busy: an earlier answer for this user is still being written (409);
   // rate_limited: the per-user message limit (429).
-  kind: 'unavailable' | 'timeout' | 'interrupted' | 'busy' | 'rate_limited';
+  // offline: the request never left the device (spec §3.4); not retryable from the card, the text goes back to the bar.
+  kind: 'unavailable' | 'timeout' | 'interrupted' | 'busy' | 'rate_limited' | 'offline';
   retryable: boolean;
   // rate_limited only, when the server said how long to wait.
   retryAfterSeconds?: number;
@@ -87,6 +89,7 @@ function strings(raw: unknown): string[] {
 // A failed request -> the error card. Anything unrecognised is 'unavailable'
 // and retryable, so a new server error never strands the user.
 function thrownError(thrown: unknown, turn: Pick<CoachTurnError, 'request' | 'userMessageId' | 'received'>): CoachTurnError {
+  if (isNetworkError(thrown) && !turn.received) return { kind: 'offline', retryable: false, ...turn };
   if (thrown instanceof CoachTimeoutError) return { kind: 'timeout', retryable: true, ...turn };
   if (thrown instanceof CoachStreamInterruptedError) return { kind: 'interrupted', retryable: true, ...turn };
   if (thrown instanceof TurnInProgressError) return { kind: 'busy', retryable: true, ...turn };
@@ -311,8 +314,13 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         const kept = !!answer && (!!answer.text || !!answer.card || !!answer.safety);
         let next = kept ? prev.map((m) => (m.id === id ? { ...m, state: 'interrupted' as const } : m)) : prev.filter((m) => m.id !== id);
         // Nothing came back at all: the question never reached the coach. Matched by id, so
-        // an earlier question with the same text is never marked.
-        if (!received && userMessageId !== undefined) next = next.map((m) => (m.id === userMessageId ? { ...m, failed: true } : m));
+        // an earlier question with the same text is never marked. Offline, it leaves the thread
+        // altogether; the page puts its text back in the prompt bar (spec §3.4).
+        if (!received && userMessageId !== undefined) {
+          next = failure?.kind === 'offline'
+            ? next.filter((m) => m.id !== userMessageId)
+            : next.map((m) => (m.id === userMessageId ? { ...m, failed: true } : m));
+        }
         return next;
       });
       if (thrown instanceof CoachConsentRequiredError || consentEvent) options.current.onConsentRequired?.();

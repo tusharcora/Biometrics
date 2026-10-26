@@ -11,6 +11,7 @@ import {
   type CoachEngineDTO,
   type CoachStatusDTO,
 } from '../api/coach';
+import { KIP_COPY } from '../lib/kipCopy';
 import { COLORS } from '../theme';
 import { SettingsGroup, SettingsRow } from './ui/settings-list';
 import { Text } from './ui/text';
@@ -23,7 +24,7 @@ interface AiEngineRowProps {
   onChooseHosted: () => void;
 }
 
-// Profile -> AI Coach -> "AI engine" (spec 3): On-device (default) or Claude.
+// Profile -> KIP -> "KIP's AI engine" (spec 3; KIP Coach §7.5): On-device (default) or Claude.
 // The choice is only drawn when this server offers Claude. Choosing Claude
 // without a current hosted consent opens the consent screen instead of
 // switching. While the hosted consent is held it can always be withdrawn, even
@@ -91,7 +92,7 @@ export function AiEngineRow({ status, onChange, onChooseHosted }: AiEngineRowPro
   return (
     <View testID="ai-engine" className="gap-2">
       <SettingsGroup
-        label="AI engine"
+        label={KIP_COPY.hostedTitle}
         footer="On-device is the default: answers are written on your own server. Before Claude answers, its consent screen shows exactly what is sent to Anthropic."
       >
         {hosted.available ? (
@@ -136,7 +137,7 @@ export function AiEngineRow({ status, onChange, onChooseHosted }: AiEngineRowPro
       </SettingsGroup>
       {hostedGone ? (
         <Text testID="ai-engine-unavailable" className="px-4 text-caption text-muted-foreground">
-          {"Claude isn't available on this server right now. Your coach answers on-device."}
+          {KIP_COPY.hostedGone}
         </Text>
       ) : null}
       {failed ? (

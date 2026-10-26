@@ -45,6 +45,12 @@ describe('AiEngineRow', () => {
     expect(getByTestId('ai-engine-hosted')).toHaveTextContent(/Claude/);
   });
 
+  it("is labelled KIP's AI engine", () => {
+    const { getByText } = setup(status());
+
+    expect(getByText("KIP's AI engine")).toBeTruthy();
+  });
+
   it('is not shown when this server does not offer Claude', () => {
     const { queryByTestId } = setup(status({}, { available: false }));
 

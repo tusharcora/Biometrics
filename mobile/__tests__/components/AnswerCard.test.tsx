@@ -222,6 +222,7 @@ describe('FollowUpChips', () => {
 
     expect(onAsk).toHaveBeenCalledWith("How's my week?");
     expect(getByTestId('follow-up-0').props.accessibilityRole).toBe('button');
+    expect(getByTestId('follow-up-0').props.accessibilityHint).toBe('Asks KIP');
   });
 
   it('cannot be tapped while an answer is streaming', () => {

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Theme sets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(245,245,244)}
+.st{font-size:12px;line-height:17px;color:rgb(155,157,166)}
+.stk{font-family:'Silkscreen',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase}
+.rm{width:390px;height:240px;border-radius:16px;overflow:hidden;border:1px solid rgb(36,39,46);box-sizing:border-box}
+</style>
+</helmet>
+<div style="width: 1282px; height: 920px; box-sizing: border-box; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; align-items: baseline; gap: 16px">
+    <h2 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 20px; letter-spacing: 1px">THEME SETS</h2>
+    <span class="st" style="font-size: 13px">A set fills every slot in one tap, then each piece can still be swapped. Earning a set unlocks all its pieces. Rooms below use the catalogue items at room scale.</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px">
+    <sc-for list="{{sets}}" as="s" hint-placeholder-count="6">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="display: flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; background: {{s.color}}"></span><span class="label">{{s.name}}</span></span>
+        <div class="rm"><svg role="img" aria-label="{{s.aria}}" width="{{s.rm.w}}" height="{{s.rm.h}}" shape-rendering="crispEdges" style="display: block; margin: -1px"><sc-for list="{{s.rm.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></div>
+        <span class="st">{{s.items}}</span>
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span class="st" style="flex: 1"><span class="stk" style="color: {{s.sc}}">{{s.status}}</span> · {{s.unlock}}</span>
+          <sc-if value="{{s.own}}" hint-placeholder-val="{{ false }}"><button class="b df" style="height: 36px; padding: 0 14px; font-size: 13px">Apply set</button></sc-if>
+          <button class="b ol" style="height: 36px; padding: 0 12px; font-size: 13px">Preview</button>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1282,"height":920}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+var KPOSES = { rest: {}, wave: { arms: [[12, 9, "s"], [13, 8, "s"]] }, type: { arms: [[12, 10, "s"], [13, 10, "s"]] } };
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function pxLayers(rects, u) { var by = {}, order = []; rects.forEach(function (r) { var f = r[4]; if (!by[f]) { by[f] = ""; order.push(f); } by[f] += "M" + r[0] * u + " " + r[1] * u + "h" + r[2] * u + "v" + r[3] * u + "h-" + r[2] * u + "z"; }); return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function R(r, x, y, w, h, c) { r.push([x, y, w, h, c]); }
+var FAM = { SG: "Sleep goal", SB: "Steady bedtime", ST: "Step goal", CI: "Check-in", BR: "Best recovery week", EL: "Every day logged", SM: "Steadiest month" };
+var ROM = ["", "I", "II", "III", "IV", "V"];
+function unl(c) { var m = c.match(/^([A-Z]+)(\d+)$/), n = +m[2]; if (m[1] === "ANY") return "Any family · level " + ROM[n]; if (m[1] === "RC") return "Read " + n + " weekly recaps"; if (m[1] === "CB") return "Cheer a buddy " + n + " times"; return FAM[m[1]] + " · " + ROM[n]; }
+function owned(c) { return /^[A-Z]+1$/.test(c) && !/^(RC|CB)/.test(c) || c === "RC4" || c === "CB5"; }
+
+// ---- surfaces (same code as the Walls & floors catalogue) ----
+function patch(k, W, H, p) {
+  var r = [], x, y, i;
+  function f(c) { R(r, 0, 0, W, H, c); }
+  if (k === "panel") { f("#6B4F3A"); for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, "#5A4130"); R(r, 0, 0, W, 1, "#8A6A4E"); R(r, 0, Math.floor(H / 2), W, 1, "#5A4130"); }
+  else if (k === "shoji") { f("#EDE6D3"); for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, "#6B4F3A"); for (y = 0; y < H; y += 4) R(r, 0, y, W, 1, "#6B4F3A"); }
+  else if (k === "concrete") { f("#6B7280"); for (i = 0; i < W * H / 6; i++) { x = (i * 7 + 3) % W; y = (i * 11 + 5) % H; R(r, x, y, 1, 1, i % 2 ? "#5B6170" : "#7B8290"); } }
+  else if (k === "florals") { f("#3B2F4A"); for (y = 2; y < H; y += 6) for (x = (y % 12 === 2 ? 2 : 5); x < W; x += 6) { R(r, x, y - 1, 1, 1, "#F9A8D4"); R(r, x - 1, y, 3, 1, "#F9A8D4"); R(r, x, y + 1, 1, 1, "#F9A8D4"); R(r, x, y, 1, 1, "#FDE047"); R(r, x + 1, y + 2, 1, 1, "#4ADE80"); } }
+  else if (k === "neon") { f("#140A2A"); for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, "#7C3AED"); for (y = 0; y < H; y += 6) R(r, 0, y, W, 1, "#7C3AED"); }
+  else if (k === "stars") { f("#0F172A"); for (i = 0; i < W * H / 14; i++) { x = (i * 13 + 5) % W; y = (i * 7 + 3) % H; R(r, x, y, 1, 1, i % 3 ? "#F8FAFC" : "#FDE68A"); } }
+  else if (k === "oakDark" || k === "oakLight") { var a = k === "oakDark" ? "#5B4636" : "#D4B996", b2 = k === "oakDark" ? "#4A382B" : "#C2A680"; f(a); for (y = 4; y < H; y += 5) R(r, 0, y, W, 1, b2); for (y = 0; y < H; y += 5) for (x = (y % 10 ? 8 : 20); x < W; x += 24) R(r, x, y, 1, 5, b2); }
+  else if (k === "tatami") { f("#C9C08A"); for (x = 0; x < W; x += 2) R(r, x, 0, 1, H, "#BDB37A"); for (x = 0; x < W; x += 12) R(r, x, 0, 1, H, "#3F6212"); R(r, 0, 0, W, 1, "#3F6212"); }
+  else if (k === "carpet") { f(p.s); for (i = 0; i < W * H / 4; i++) { x = (i * 5 + 1) % W; y = (i * 3 + 2) % H; R(r, x, y, 1, 1, i % 2 ? p.d : p.b); } }
+  else if (k === "rubber") { f("#1F2937"); for (x = 0; x < W; x += 8) R(r, x, 0, 1, H, "#111827"); for (y = 0; y < H; y += 8) R(r, 0, y, W, 1, "#111827"); for (i = 0; i < W * H / 16; i++) R(r, (i * 9 + 3) % W, (i * 5 + 2) % H, 1, 1, i % 4 ? "#475569" : "#DC2626"); }
+  return r;
+}
+var WX = {
+  clear: { sky: ["#60A5FA", "#93C5FD"], f: function (r) { R(r, 28, 12, 8, 8, "#FBBF24"); R(r, 29, 11, 6, 1, "#FDE68A"); } },
+  mostly: { sky: ["#60A5FA", "#93C5FD"], f: function (r) { R(r, 28, 12, 8, 8, "#FBBF24"); R(r, 14, 25, 14, 4, "#F3F4F6"); R(r, 16, 24, 8, 1, "#FFFFFF"); } },
+  cloudy: { sky: ["#8592A6", "#A3AEC0"], f: function (r) { R(r, 30, 12, 6, 5, "#FCD34D"); R(r, 12, 14, 14, 4, "#E5E7EB"); R(r, 24, 17, 15, 5, "#CBD5E1"); R(r, 12, 29, 12, 3, "#CBD5E1"); } },
+  night: { sky: ["#0F172A", "#1E1B4B"], f: function (r) { R(r, 30, 13, 6, 6, "#F1F5F9"); R(r, 33, 13, 3, 3, "#0F172A"); [[14, 14], [20, 18], [16, 30], [36, 28], [24, 12]].forEach(function (s) { R(r, s[0], s[1], 1, 1, "#F8FAFC"); }); } }
+};
+// ---- catalogue items used by the sets: [art, flags] (same art as the catalogue boards) ----
+function trophy(a, b, c) { return [[0, 0, 6, 1, b], [0, 1, 6, 3, a], [-1, 1, 1, 2, a], [6, 1, 1, 2, a], [1, 4, 4, 1, c], [2, 5, 2, 2, c], [1, 7, 4, 1, c], [1, 1, 1, 2, b]]; }
+function fern(a, b, c, pot, rim) { return [[3, 20, 8, 7, pot], [2, 19, 10, 2, rim], [6, 12, 2, 7, a], [3, 14, 3, 2, b], [8, 13, 3, 2, b], [2, 11, 2, 3, c], [10, 10, 2, 3, c], [5, 9, 2, 3, b]]; }
+function lamp(head, shade) { return [[3, 11, 5, 2, "#334155"], [5, 3, 1, 8, "#334155"], [0, 0, 7, 3, head], [0, 2, 7, 1, shade]]; }
+var IT = {
+  plainwin: [[], ""],
+  noren: [[[-2, -1, 38, 1, "#7C5A3E"], [1, 0, 10, 13, "@b"], [12, 0, 10, 13, "@b"], [23, 0, 10, 13, "@b"], [1, 12, 10, 1, "@d"], [12, 12, 10, 1, "@d"], [23, 12, 10, 1, "@d"], [16, 5, 2, 2, "#F8FAFC"]], "T"],
+  curtains: [[[-3, -3, 40, 1, "#7C5A3E"], [-3, -2, 6, 32, "@b"], [-1, -2, 1, 32, "@s"], [1, -2, 1, 32, "@h"], [31, -2, 6, 32, "@b"], [33, -2, 1, 32, "@s"], [35, -2, 1, 32, "@h"]], "T"],
+  blinds: [[[2, 2, 30, 1, "#E5E7EB"], [2, 5, 30, 1, "#E5E7EB"], [2, 8, 30, 1, "#E5E7EB"], [2, 11, 30, 1, "#E5E7EB"], [2, 13, 30, 2, "#CBD5E1"], [29, 2, 1, 20, "#94A3B8"]], ""],
+  fairy: [[[0, 1, 34, 1, "#475569"], [2, 2, 1, 1, "#FDE047"], [6, 3, 1, 1, "#F472B6"], [10, 2, 1, 1, "#67E8F9"], [14, 3, 1, 1, "#FDE047"], [18, 2, 1, 1, "#F472B6"], [22, 3, 1, 1, "#67E8F9"], [26, 2, 1, 1, "#FDE047"], [30, 3, 1, 1, "#F472B6"]], "G"],
+  wave: [[[0, 0, 20, 14, "#1F2937"], [1, 1, 18, 12, "#EDE6D3"], [1, 9, 18, 4, "#1D4ED8"], [3, 6, 6, 3, "#1D4ED8"], [6, 4, 4, 2, "#1D4ED8"], [8, 3, 3, 1, "#1D4ED8"], [9, 4, 2, 1, "#F8FAFC"], [7, 5, 2, 1, "#F8FAFC"], [2, 8, 3, 1, "#F8FAFC"], [14, 8, 3, 1, "#F8FAFC"], [14, 3, 2, 2, "#DC2626"]], ""],
+  motto: [[[0, 0, 14, 18, "#F1F5F9"], [1, 1, 12, 16, "#1E1B4B"], [4, 3, 5, 5, "#FDE68A"], [6, 3, 3, 3, "#1E1B4B"], [2, 11, 10, 1, "#F1F5F9"], [3, 13, 8, 1, "#F1F5F9"], [2, 15, 10, 1, "#C4B5FD"]], ""],
+  game: [[[0, 0, 14, 18, "#1E1B4B"], [1, 1, 12, 16, "#312E81"], [4, 4, 6, 1, "#A3E635"], [3, 5, 8, 2, "#A3E635"], [5, 5, 1, 1, "#1E1B4B"], [8, 5, 1, 1, "#1E1B4B"], [3, 7, 2, 1, "#A3E635"], [9, 7, 2, 1, "#A3E635"], [2, 12, 10, 1, "#FDE047"], [3, 14, 8, 1, "#F472B6"]], ""],
+  mountain: [[[0, 0, 18, 14, "#1F2937"], [1, 1, 16, 12, "#93C5FD"], [3, 8, 6, 5, "#15803D"], [6, 6, 4, 7, "#15803D"], [10, 9, 6, 4, "#166534"], [12, 3, 2, 2, "#FDE68A"]], ""],
+  map: [[[0, 0, 20, 13, "#78350F"], [1, 1, 18, 11, "#1E3A5F"], [3, 3, 4, 3, "#4ADE80"], [4, 6, 2, 3, "#4ADE80"], [9, 2, 3, 3, "#4ADE80"], [10, 5, 3, 4, "#4ADE80"], [14, 3, 4, 3, "#4ADE80"], [16, 8, 2, 2, "#4ADE80"]], ""],
+  cork: [[[0, 0, 20, 14, "#7C5A3E"], [1, 1, 18, 12, "#C08A5A"], [3, 3, 4, 4, "#FDE047"], [9, 2, 4, 4, "#F9A8D4"], [14, 4, 4, 4, "#93C5FD"], [5, 8, 4, 4, "#A7F3D0"], [12, 9, 5, 3, "#F1F5F9"]], ""],
+  luckycat: [[[0, -1, 1, 1, "#F8FAFC"], [6, -1, 1, 1, "#F8FAFC"], [0, 0, 7, 4, "#F8FAFC"], [0, 3, 7, 6, "#F8FAFC"], [7, -1, 1, 3, "#F8FAFC"], [2, 2, 1, 1, "#1F2937"], [4, 2, 1, 1, "#1F2937"], [0, 4, 7, 1, "#DC2626"], [3, 5, 1, 1, "#FACC15"], [2, 6, 3, 2, "#FACC15"]], ""],
+  trophyG: [trophy("#FACC15", "#FDE68A", "#CA8A04"), "G"],
+  can: [[[0, 0, 4, 1, "#CBD5E1"], [0, 1, 4, 6, "#16A34A"], [0, 3, 4, 1, "#111827"], [1, 2, 1, 1, "#FDE047"], [2, 3, 1, 1, "#FDE047"], [1, 4, 2, 1, "#FDE047"], [0, 7, 4, 1, "#CBD5E1"]], ""],
+  books: [[[0, 1, 2, 7, "#60A5FA"], [2, 0, 2, 8, "#F87171"], [4, 2, 2, 6, "#FDE047"], [6, 2, 2, 6, "#A3E635"]], ""],
+  snowglobe: [[[1, 7, 6, 2, "#7C5A3E"], [2, 0, 4, 1, "#BAE6FD"], [1, 1, 6, 6, "#BAE6FD"], [0, 2, 1, 4, "#BAE6FD"], [7, 2, 1, 4, "#BAE6FD"], [3, 3, 2, 3, "#15803D"], [2, 2, 1, 1, "#F8FAFC"], [5, 1, 1, 1, "#F8FAFC"]], ""],
+  vinyl: [[[2, -1, 8, 8, "#1D4ED8"], [0, 0, 8, 8, "#F59E0B"], [1, 1, 6, 6, "#111827"], [3, 3, 2, 2, "#DC2626"]], ""],
+  notebook: [[[0, 0, 22, 4, "#F1F5F9"], [10, 0, 2, 4, "#CBD5E1"], [2, 1, 6, 1, "#94A3B8"], [13, 1, 7, 1, "#94A3B8"], [2, 2, 5, 1, "#94A3B8"]], ""],
+  laptop: [[[2, 0, 16, 10, "#334155"], [3, 1, 14, 8, "#0F1A2A"], [5, 3, 6, 1, "#7DD3FC"], [5, 5, 9, 1, "#7DD3FC"], [0, 10, 20, 2, "#94A3B8"]], "G"],
+  dual: [[[0, 2, 16, 10, "#1F2937"], [1, 3, 14, 8, "#0F1A2A"], [2, 5, 8, 1, "#7DD3FC"], [2, 7, 10, 1, "#7DD3FC"], [7, 12, 2, 3, "#334155"], [18, 0, 18, 12, "#1F2937"], [19, 1, 16, 10, "#140A2A"], [21, 6, 2, 4, "#A78BFA"], [24, 4, 2, 6, "#F0ABFC"], [27, 7, 2, 3, "#A78BFA"], [30, 5, 2, 5, "#F0ABFC"], [26, 12, 3, 3, "#334155"], [4, 15, 28, 1, "#334155"]], "G"],
+  typewriter: [[[3, 0, 14, 4, "#F8FAFC"], [5, 1, 8, 1, "#94A3B8"], [0, 4, 20, 4, "#1F2937"], [1, 8, 18, 4, "#111827"], [2, 9, 16, 1, "#6B7280"], [3, 10, 14, 1, "#6B7280"]], ""],
+  crt: [[[0, 0, 20, 15, "#D6D3D1"], [0, 15, 20, 1, "#A8A29E"], [2, 2, 13, 10, "#14532D"], [3, 3, 11, 8, "#166534"], [4, 5, 6, 1, "#86EFAC"], [4, 7, 8, 1, "#86EFAC"], [16, 4, 2, 2, "#57534E"], [16, 8, 2, 2, "#57534E"]], "G"],
+  matcha: [[[0, 2, 8, 1, "#65A30D"], [0, 3, 8, 2, "#57534E"], [1, 5, 6, 1, "#44403C"], [2, 6, 4, 1, "#44403C"], [9, 1, 1, 5, "#D6D3D1"], [8, 5, 3, 1, "#A8A29E"]], ""],
+  shaker: [[[0, 0, 5, 2, "#111827"], [0, 2, 5, 8, "#E5E7EB"], [0, 6, 5, 4, "#C4B5FD"], [1, 3, 3, 1, "#94A3B8"]], ""],
+  controller: [[[1, 1, 10, 4, "#374151"], [0, 2, 1, 4, "#374151"], [11, 2, 1, 4, "#374151"], [2, 2, 1, 3, "#E5E7EB"], [1, 3, 3, 1, "#E5E7EB"], [8, 2, 1, 1, "#F472B6"], [9, 3, 1, 1, "#60A5FA"], [7, 3, 1, 1, "#4ADE80"]], ""],
+  mug: [[[0, 0, 4, 5, "@b"], [0, 0, 4, 1, "@h"], [4, 1, 1, 3, "@s"], [0, 4, 4, 1, "@s"]], "T"],
+  deskglobe: [[[1, 0, 6, 7, "#1D4ED8"], [0, 2, 1, 3, "#1D4ED8"], [2, 1, 2, 2, "#4ADE80"], [4, 4, 2, 2, "#4ADE80"], [7, 1, 1, 6, "#CA8A04"], [3, 7, 2, 1, "#7C5A3E"], [2, 8, 4, 1, "#7C5A3E"]], ""],
+  sticky: [[[0, 2, 6, 6, "#FDE047"], [2, 0, 6, 6, "#F9A8D4"], [3, 2, 4, 1, "#BE185D"], [3, 4, 3, 1, "#BE185D"]], ""],
+  bonsai: [[[1, 10, 12, 3, "#7C2D12"], [6, 5, 2, 5, "#78350F"], [4, 6, 2, 1, "#78350F"], [1, 2, 6, 4, "#15803D"], [7, 0, 7, 4, "#16A34A"], [3, 1, 3, 1, "#22C55E"]], ""],
+  snake: [[[2, 18, 9, 7, "#F1F5F9"], [3, 4, 2, 14, "#3F6212"], [6, 0, 2, 18, "#4D7C0F"], [9, 6, 2, 12, "#3F6212"], [3, 4, 1, 14, "#A3E635"], [6, 0, 1, 18, "#BEF264"], [9, 6, 1, 12, "#A3E635"]], ""],
+  cactus: [[[1, 9, 6, 5, "#C2410C"], [3, 0, 3, 9, "#65A30D"], [1, 3, 2, 3, "#65A30D"], [6, 2, 2, 3, "#65A30D"], [3, -1, 2, 1, "#F472B6"]], ""],
+  fern: [fern("#4ADE80", "#22C55E", "#16A34A", "#B45309", "#D97706"), ""],
+  glowfern: [fern("#67E8F9", "#22D3EE", "#A5F3FC", "#1E293B", "#334155"), "G"],
+  lantern: [[[1, 0, 6, 1, "#111827"], [0, 1, 8, 8, "#FEF3C7"], [0, 3, 8, 1, "#FDE68A"], [0, 6, 8, 1, "#FDE68A"], [1, 9, 6, 1, "#111827"], [3, 10, 2, 3, "#111827"]], "G"],
+  amber: [lamp("#F59E0B", "#D97706"), "G"],
+  neonbolt: [[[4, 0, 3, 1, "#22D3EE"], [3, 1, 3, 1, "#22D3EE"], [2, 2, 3, 1, "#22D3EE"], [2, 3, 6, 1, "#22D3EE"], [5, 4, 2, 1, "#22D3EE"], [4, 5, 2, 1, "#22D3EE"], [3, 6, 2, 1, "#22D3EE"], [0, 7, 9, 2, "#111827"]], "G"],
+  lava: [[[2, 0, 3, 2, "#334155"], [2, 2, 3, 10, "#7C3AED"], [1, 4, 5, 6, "#7C3AED"], [2, 5, 2, 2, "#F472B6"], [3, 8, 2, 3, "#FB923C"], [1, 12, 5, 3, "#334155"], [0, 15, 7, 1, "#334155"]], "G"],
+  reading: [[[1, 10, 8, 2, "#CA8A04"], [4, 4, 1, 6, "#CA8A04"], [1, 0, 8, 1, "#16A34A"], [0, 1, 10, 3, "#15803D"]], "G"],
+  salt: [[[2, 0, 4, 1, "#FDBA74"], [1, 1, 6, 3, "#FB923C"], [0, 4, 8, 4, "#F97316"], [1, 8, 6, 1, "#EA580C"], [1, 9, 6, 2, "#7C5A3E"]], "G"],
+  cushion: [[[1, 0, 12, 3, "#E5E7EB"], [1, 0, 12, 1, "#F8FAFC"], [0, 3, 14, 4, "@b"], [0, 3, 14, 1, "@h"], [1, 7, 12, 1, "@d"]], "T"],
+  weights: [[[0, 6, 1, 26, "#334155"], [11, 6, 1, 26, "#334155"], [0, 9, 12, 1, "#334155"], [0, 20, 12, 1, "#334155"], [-1, 32, 14, 1, "#1F2937"], [1, 6, 2, 3, "#DC2626"], [3, 7, 6, 1, "#94A3B8"], [9, 6, 2, 3, "#DC2626"], [1, 17, 2, 3, "#2563EB"], [3, 18, 6, 1, "#94A3B8"], [9, 17, 2, 3, "#2563EB"], [1, 28, 2, 4, "#111827"], [3, 29, 6, 1, "#94A3B8"], [9, 28, 2, 4, "#111827"]], ""],
+  beanbag: [[[5, 1, 6, 2, "@h"], [3, 3, 10, 3, "@b"], [1, 6, 14, 8, "@b"], [0, 9, 16, 5, "@s"], [3, 7, 8, 1, "@h"]], "T"],
+  floorlamp: [[[0, 0, 7, 4, "#FDE68A"], [3, 4, 1, 42, "#94A3B8"], [1, 46, 5, 1, "#94A3B8"]], "G"],
+  telescope: [[[0, 8, 4, 3, "#E5E7EB"], [3, 7, 4, 3, "#E5E7EB"], [6, 6, 4, 3, "#E5E7EB"], [9, 4, 4, 3, "#E5E7EB"], [12, 3, 3, 3, "#E5E7EB"], [15, 2, 1, 4, "#93C5FD"], [0, 11, 2, 2, "#111827"], [6, 9, 4, 3, "#334155"], [3, 12, 1, 24, "#475569"], [7, 12, 1, 24, "#475569"], [11, 12, 1, 24, "#475569"]], ""],
+  bookcase: [[[0, 0, 14, 44, "#5B4636"], [1, 1, 12, 10, "#3B2F2A"], [1, 12, 12, 10, "#3B2F2A"], [1, 23, 12, 10, "#3B2F2A"], [1, 34, 12, 9, "#3B2F2A"], [1, 3, 2, 8, "#60A5FA"], [3, 2, 2, 9, "#F87171"], [5, 4, 2, 7, "#FDE047"], [8, 3, 2, 8, "#A3E635"], [10, 5, 3, 6, "#C4B5FD"], [1, 15, 3, 7, "#F472B6"], [4, 14, 2, 8, "#60A5FA"], [7, 16, 2, 6, "#FB923C"], [9, 14, 2, 8, "#4ADE80"], [2, 26, 2, 7, "#FDE047"], [4, 25, 2, 8, "#F87171"], [6, 27, 4, 6, "#94A3B8"], [11, 26, 2, 7, "#60A5FA"], [1, 36, 3, 7, "#C4B5FD"], [5, 37, 2, 6, "#A3E635"], [8, 36, 4, 7, "#7C5A3E"]], ""],
+  rugTatami: [[[0, 0, 60, 7, "#C9C08A"], [0, 0, 60, 1, "#3F6212"], [0, 6, 60, 1, "#3F6212"], [8, 1, 1, 5, "#B5AB72"], [16, 1, 1, 5, "#B5AB72"], [24, 1, 1, 5, "#B5AB72"], [32, 1, 1, 5, "#B5AB72"], [40, 1, 1, 5, "#B5AB72"], [48, 1, 1, 5, "#B5AB72"]], ""],
+  gymmat: [[[0, 0, 60, 7, "#111827"], [15, 0, 1, 7, "#1F2937"], [30, 0, 1, 7, "#1F2937"], [45, 0, 1, 7, "#1F2937"]], ""],
+  rainbow: [[[0, 0, 60, 1, "#F87171"], [0, 1, 60, 1, "#FB923C"], [0, 2, 60, 1, "#FDE047"], [0, 3, 60, 1, "#4ADE80"], [0, 4, 60, 1, "#60A5FA"], [0, 5, 60, 1, "#A78BFA"], [0, 6, 60, 1, "#F472B6"]], ""],
+  woven: [[[8, 0, 44, 1, "#C08A5A"], [3, 1, 54, 1, "#C08A5A"], [0, 2, 60, 3, "#C08A5A"], [3, 5, 54, 1, "#C08A5A"], [8, 6, 44, 1, "#C08A5A"], [6, 3, 48, 1, "#92400E"], [14, 1, 32, 1, "#A16207"], [14, 5, 32, 1, "#A16207"]], ""],
+  shaggy: [[[0, 1, 60, 6, "@b"], [0, 0, 2, 1, "@h"], [8, 0, 2, 1, "@h"], [16, 0, 2, 1, "@h"], [24, 0, 2, 1, "@h"], [32, 0, 2, 1, "@h"], [40, 0, 2, 1, "@h"], [48, 0, 2, 1, "@h"], [56, 0, 2, 1, "@h"], [5, 3, 1, 2, "@s"], [17, 4, 1, 2, "@s"], [29, 3, 1, 2, "@s"], [41, 4, 1, 2, "@s"], [53, 3, 1, 2, "@s"]], "T"],
+  red: [[[0, 0, 60, 7, "#9A3B3B"], [0, 1, 60, 1, "#7F2D2D"], [0, 5, 60, 1, "#7F2D2D"]], ""],
+  cat: [[[10, -1, 1, 1, "#F59E0B"], [14, -1, 1, 1, "#F59E0B"], [10, 0, 5, 4, "#F59E0B"], [2, 2, 10, 4, "#F59E0B"], [12, 2, 2, 1, "#78350F"], [0, 3, 2, 1, "#F59E0B"], [4, 2, 1, 2, "#D97706"], [7, 2, 1, 2, "#D97706"], [0, 5, 16, 3, "#7C3AED"]], ""],
+  dog: [[[2, 4, 10, 5, "#C8A27A"], [10, 0, 6, 6, "#C8A27A"], [10, 0, 2, 4, "#8B6B4E"], [14, 2, 1, 1, "#111827"], [15, 4, 1, 1, "#111827"], [3, 9, 2, 3, "#C8A27A"], [9, 9, 2, 3, "#C8A27A"], [0, 3, 2, 2, "#C8A27A"], [10, 6, 5, 1, "#DC2626"]], ""],
+  hamster: [[[1, 0, 12, 1, "#94A3B8"], [0, 1, 1, 9, "#94A3B8"], [3, 1, 1, 9, "#94A3B8"], [6, 1, 1, 9, "#94A3B8"], [9, 1, 1, 9, "#94A3B8"], [13, 1, 1, 9, "#94A3B8"], [8, 3, 5, 5, "#F472B6"], [10, 5, 1, 1, "#111827"], [2, 7, 4, 3, "#FDBA74"], [0, 10, 14, 2, "#334155"]], ""],
+  bed: [[[0, 0, 16, 5, "@b"], [2, 0, 12, 2, "@d"], [0, 4, 16, 1, "@s"]], "T"],
+  fish: [[[2, 0, 10, 1, "#BAE6FD"], [0, 1, 14, 8, "#7DD3FC"], [1, 3, 12, 5, "#38BDF8"], [1, 9, 12, 1, "#7DD3FC"], [5, 5, 3, 2, "#FB923C"], [8, 4, 1, 1, "#FB923C"], [8, 6, 1, 1, "#FB923C"], [2, 10, 10, 2, "#7C5A3E"]], ""]
+};
+var WEAR = {
+  hachimaki: [[4, 6], ["wwwrrwwwwW", ".........W"], { w: "#F8FAFC", r: "#DC2626", W: "#E5E7EB" }],
+  sweatband: [[4, 6], ["wwwwwwww", "rrrrrrrr"], { w: "#F8FAFC", r: "#DC2626" }],
+  towel: [[3, 10], ["ssssssssss", "w........w", "w........w"], { s: "#60A5FA", w: "#F1F5F9" }],
+  phones: [[3, 5], ["..kkkkkk..", ".k......k.", "cc......cc", "cC......cC", "cc......cc"], { k: "#1F2937", c: "#38BDF8", C: "#0369A1" }],
+  beanie: [[4, 2], ["...wW...", ".LLrrrR.", "LrrrrrrR", "ddddddDD"], { w: "#F8FAFC", W: "#CBD5E1", r: "#EF4444", L: "#F87171", R: "#B91C1C", d: "#B91C1C", D: "#7F1D1D" }],
+  round: [[5, 7], ["FFFFFf", "f.ff.f", "ffffff"], { F: "#FCD34D", f: "#D97706" }],
+  bowtie: [[5, 10], ["bb..bb", "bbkkbb", "bb..bb"], { b: "#2563EB", k: "#1E3A8A" }]
+};
+function kipCells(body, pose, mood, wear, ox, oy) {
+  var p = kRamp(body), g = [], x, y, P = KPOSES[pose] || {};
+  for (y = 0; y < KN; y++) { var row = []; for (x = 0; x < KN; x++) { var L = KBASE[y][x]; row.push(L === "." ? null : p[L]); } g.push(row); }
+  KEYES.forEach(function (e) { var q = mood === "glance" ? [e[0] + 1, e[1]] : e; if (mood === "shut") { g[e[1]][e[0]] = p.e; g[e[1]][e[0] + (e[0] < 8 ? -1 : 1)] = p.e; } else g[q[1]][q[0]] = p.e; });
+  (P.arms || []).forEach(function (a) { if (!g[a[1]][a[0]]) g[a[1]][a[0]] = p[a[2]]; });
+  wear.forEach(function (id) { var o = WEAR[id]; o[1].forEach(function (rowS, j) { for (var k = 0; k < rowS.length; k++) { var L = rowS[k]; if (L === ".") continue; var X = o[0][0] + k, Y = o[0][1] + j; if (X >= 0 && Y >= 0 && X < KN && Y < KN) g[Y][X] = o[2][L]; } }); });
+  var r = []; for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) if (g[y][x]) r.push([ox + x, oy + y, 1, 1, g[y][x]]); return r;
+}
+function res(rects, ramp) { return rects.map(function (q) { var c = q[4]; return [q[0], q[1], q[2], q[3], c.charAt(0) === "@" ? ramp[c.slice(1)] : c]; }); }
+// Places an item centred on cx with its bottom on the given row; returns the moved rects.
+function place(id, cx, bottom, ramp) { var r = res(IT[id][0], ramp), x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; r.forEach(function (q) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0] + q[2]); y1 = Math.max(y1, q[1] + q[3]); }); var dx = cx - Math.floor((x1 - x0) / 2) - x0, dy = bottom - y1; return r.map(function (q) { return [q[0] + dx, q[1] + dy, q[2], q[3], q[4]]; }); }
+function at(id, ox, oy, ramp) { return res(IT[id][0], ramp).map(function (q) { return [q[0] + ox, q[1] + oy, q[2], q[3], q[4]]; }); }
+function glows(id) { return IT[id][1].indexOf("G") >= 0; }
+function room(S) {
+  var ramp = kRamp(S.color), r = [], W = 130, H = 80, night = S.weather === "night", wx = WX[S.weather], low = S.low, deskY = low ? 62 : 54, x;
+  var lit = [];
+  function add(list, id) { r = r.concat(list); if (id && glows(id)) lit.push(list); }
+  add(patch(S.wall, W, 54, ramp));
+  R(r, 8, 8, 34, 30, S.trim); R(r, 10, 10, 30, 13, wx.sky[0]); R(r, 10, 23, 30, 13, wx.sky[1]); wx.f(r); R(r, 24, 10, 2, 26, S.trim); R(r, 10, 22, 30, 1, S.trim); R(r, 6, 37, 38, 2, "#191E28");
+  add(at(S.window, 8, 8, ramp), S.window);
+  add(place(S.art, 61, 26, ramp), S.art);
+  R(r, 84, 20, 36, 2, "#5B4636"); R(r, 86, 22, 1, 3, "#5B4636"); R(r, 117, 22, 1, 3, "#5B4636");
+  add(place(S.shelf, 102, 20, ramp), S.shelf);
+  R(r, 0, 54, W, 2, "#191E28");
+  add(patch(S.floor, W, 24, ramp).map(function (q) { return [q[0], q[1] + 56, q[2], q[3], q[4]]; }));
+  add(at(S.rug, 30, 68, ramp));
+  add(place(S.pet, 22, 74, ramp), S.pet);
+  add(place(S.plant, 7, 71, ramp), S.plant);
+  add(place(S.corner, 51, 72, ramp), S.corner);
+  if (low) { R(r, 60, 68, 16, 2, "#7C3AED"); R(r, 60, 68, 16, 1, "#8B5CF6"); R(r, 72, 62, 54, 2, "#A0785A"); R(r, 72, 64, 54, 2, "#7C5A3E"); R(r, 74, 66, 2, 6, "#7C5A3E"); R(r, 122, 66, 2, 6, "#7C5A3E"); }
+  else { R(r, 58, 44, 2, 18, "#3F4656"); R(r, 58, 60, 20, 2, "#3F4656"); R(r, 59, 62, 2, 10, "#3F4656"); R(r, 75, 62, 2, 10, "#3F4656"); R(r, 76, 54, 50, 2, "#9A7350"); R(r, 76, 56, 50, 2, "#7C5A3E"); R(r, 78, 58, 2, 14, "#7C5A3E"); R(r, 122, 58, 2, 14, "#7C5A3E"); R(r, 104, 58, 16, 7, "#7C5A3E"); }
+  add(place(S.lamp, 122, deskY, ramp), S.lamp);
+  add(place(S.desk, 102, deskY, ramp), S.desk);
+  add(place(S.item, 78, deskY, ramp), S.item);
+  r = r.concat(kipCells(S.color, S.pose, S.mood, S.wear, 61, low ? 53 : 45));
+  if (night) { R(r, 0, 0, W, H, "rgba(6,8,24,0.45)"); lit.forEach(function (l) { r = r.concat(l); }); R(r, 113, deskY - 14, 14, 14, "rgba(253,224,71,0.12)"); }
+  return { w: W * 3, h: H * 3, layers: pxLayers(r, 3) };
+}
+var SETS = [
+  { name: "Japanese · coral", color: "#FB7185", trim: "#3B2F2A", weather: "cloudy", low: true, wall: "shoji", floor: "tatami", window: "noren", art: "wave", shelf: "luckycat", desk: "notebook", item: "matcha", plant: "bonsai", lamp: "lantern", corner: "cushion", rug: "rugTatami", pet: "cat", wear: ["hachimaki"], pose: "rest", mood: "shut", unlock: "SB3",
+    items: "Shoji wall · tatami floor · noren · great wave print · lucky cat · notebook on a low desk · matcha bowl · bonsai · paper lantern · floor cushions · tatami mat · cat · hachimaki" },
+  { name: "Home gym · cobalt", color: "#3B82F6", trim: "#1E2430", weather: "clear", wall: "concrete", floor: "rubber", window: "blinds", art: "motto", shelf: "trophyG", desk: "laptop", item: "shaker", plant: "snake", lamp: "amber", corner: "weights", rug: "gymmat", pet: "dog", wear: ["sweatband", "towel"], pose: "wave", mood: "idle", unlock: "ST4",
+    items: "Concrete wall · gym rubber floor · blinds · “SLEEP IS A SKILL” poster · gold trophy · laptop · protein shaker · snake plant · dumbbell rack · gym mat · pixel dog · sweatband and towel" },
+  { name: "Gamer night · lilac", color: "#C4B5FD", trim: "#0F0B1E", weather: "night", wall: "neon", floor: "carpet", window: "fairy", art: "game", shelf: "can", desk: "dual", item: "controller", plant: "cactus", lamp: "neonbolt", corner: "beanbag", rug: "rainbow", pet: "hamster", wear: ["phones"], pose: "type", mood: "glance", unlock: "ANY4",
+    items: "Neon grid wall · tinted carpet · fairy lights · “Pixel Quest” poster · energy can on the shelf · two screens · game controller · neon bolt · bean bag · rainbow rug · hamster · headphones" },
+  { name: "Cottage · lime", color: "#A3E635", trim: "#3B2F2A", weather: "mostly", wall: "florals", floor: "oakLight", window: "curtains", art: "mountain", shelf: "books", desk: "typewriter", item: "mug", plant: "fern", lamp: "salt", corner: "floorlamp", rug: "woven", pet: "bed", wear: ["beanie"], pose: "type", mood: "glance", unlock: "RC4",
+    items: "Florals wall · light oak floor · curtains · mountain print · books · typewriter · mug · fern · salt lamp · floor lamp · round woven rug · pet bed · beanie" },
+  { name: "Stargazer · sky", color: "#7DD3FC", trim: "#0B1222", weather: "night", wall: "stars", floor: "carpet", window: "plainwin", art: "map", shelf: "snowglobe", desk: "crt", item: "deskglobe", plant: "glowfern", lamp: "lava", corner: "telescope", rug: "shaggy", pet: "fish", wear: ["round"], pose: "rest", mood: "glance", unlock: "SM5",
+    items: "Starry wall · tinted carpet · world map · snow globe · retro CRT · desk globe · glow fern · lava lamp · telescope · shaggy rug · fish bowl · round glasses" },
+  { name: "Library · mint", color: "#6EE7B7", trim: "#2E241E", weather: "cloudy", wall: "panel", floor: "oakDark", window: "curtains", art: "cork", shelf: "vinyl", desk: "notebook", item: "sticky", plant: "snake", lamp: "reading", corner: "bookcase", rug: "red", pet: "cat", wear: ["round", "bowtie"], pose: "rest", mood: "idle", unlock: "RC12",
+    items: "Wood panel wall · dark oak floor · curtains · cork board · vinyl stack · notebook · sticky notes · snake plant · reading lamp · tall bookcase · red rug · cat · round glasses and bow tie" }
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      sets: SETS.map(function (S) {
+        var own = owned(S.unlock);
+        return { name: S.name, color: S.color, rm: room(S), items: S.items, aria: S.name + " room set", own: own, status: own ? "Earned" : "Locked", sc: own ? "#4ADE80" : "rgb(155,157,166)", unlock: unl(S.unlock) };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

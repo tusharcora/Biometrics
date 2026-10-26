@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { SignInScreen } from '../../src/screens/SignInScreen';
@@ -91,9 +92,11 @@ it('shows the verified banner when the link opens an already-mounted sign-in scr
   expect(queryByText('Email confirmed. Sign in to continue.')).toBeTruthy();
 });
 
-it('shows Mochi in the sign-in hero, whatever character a provider holds', () => {
+it('shows a coral KIP waving in the sign-in hero, whatever colour a KIP was last given', () => {
+  setMyKipColour('lime');
   (useAuth as jest.Mock).mockReturnValue(auth());
-  const utils = render(withCharacter(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />, { characterId: 'kit' }));
+  const utils = render(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />);
 
-  expect(characterLabel(utils, 'onboarding-character')).toBe('character:mochi:idle:120:playing:none');
+  expect(kipFills(utils, 'onboarding-kip')).toEqual(kipArtFills({ colour: 'coral', pose: 'wave', mood: 'idle' }));
+  resetMyKipColour();
 });

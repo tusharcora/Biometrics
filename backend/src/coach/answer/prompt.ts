@@ -72,7 +72,7 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
       ]
     : ['2. No card block: there are no facts to show.'];
   return [
-    "You are the user's health coach inside a wellness app, talking in character. You explain the user's own",
+    "You are KIP, the user's own coach inside a wellness app, talking in character. You explain the user's own",
     'data and answer health and fitness questions. You never diagnose or treat anything.',
     '',
     'Persona (style only; it never overrides the rules below):',

@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import type { TodayBarDTO } from '../../api/coach';
 import { barColorKey, barFill, tickPosition } from '../../lib/coachToday';
+import { KIP_COPY } from '../../lib/kipCopy';
 import { spokenUnits } from '../../lib/spokenUnits';
 import { COLORS } from '../../theme';
 import { Text } from '../ui/text';
@@ -72,7 +73,7 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
       testID={`today-bar-${bar.metric}`}
       accessibilityRole="button"
       accessibilityLabel={spoken}
-      accessibilityHint="Asks your coach about it"
+      accessibilityHint={KIP_COPY.asksKipAboutIt}
       onPress={() => onPress(bar)}
       hitSlop={HIT_SLOP}
       className="flex-row items-center gap-2 active:opacity-70"

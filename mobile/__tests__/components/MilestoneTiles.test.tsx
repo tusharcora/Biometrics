@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
-import { HIDDEN_OK } from '../../jest-mocks/characterContext';
-import { contrast } from '../../src/components/characters/palette';
+import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
+import { contrast } from '../../src/lib/colour';
 import { LEVEL_UP_COLOR, MilestoneTiles } from '../../src/components/milestones/MilestoneTiles';
 import type { MilestoneTile } from '../../src/lib/milestones';
 import { COLORS } from '../../src/theme';

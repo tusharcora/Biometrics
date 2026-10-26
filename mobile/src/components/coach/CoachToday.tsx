@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import type { TodayBarDTO, TodaySummaryDTO } from '../../api/coach';
 import { barQuestion, spanQuestion } from '../../lib/coachToday';
+import { KIP_COPY } from '../../lib/kipCopy';
 import { COLORS } from '../../theme';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
@@ -82,7 +83,7 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
                 key={index}
                 testID={`today-span-${metric}`}
                 accessibilityRole="link"
-                accessibilityHint="Asks your coach about it"
+                accessibilityHint={KIP_COPY.asksKipAboutIt}
                 onPress={() => onAsk(spanQuestion(metric, bars))}
                 className="text-heading"
                 style={{

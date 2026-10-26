@@ -22,7 +22,7 @@ export const KIP_COLOURS = {
 export type KipColour = keyof typeof KIP_COLOURS;
 export const DEFAULT_KIP_COLOUR: KipColour = 'coral';
 
-export const KIP_POSES = ['rest', 'wave', 'cheer', 'bottle', 'coffee', 'stretch'] as const;
+export const KIP_POSES = ['rest', 'wave', 'cheer', 'bottle', 'coffee', 'stretch', 'type', 'think', 'point', 'shrug'] as const;
 export type KipPose = (typeof KIP_POSES)[number];
 export const KIP_MOODS = ['idle', 'curious', 'sleepy', 'proud', 'startled', 'glance', 'determined'] as const;
 export type KipMood = (typeof KIP_MOODS)[number];
@@ -41,6 +41,8 @@ export interface KipVariant {
   colour?: KipColour;
   pose?: KipPose;
   mood?: KipMood;
+  /** The loop frame, 0–2. Only `type` has three; every other pose ignores it. */
+  frame?: number;
 }
 
 // Grid roles: b body, h light, s shade, d deep, e eyes, w white, z ground shadow.
@@ -74,7 +76,13 @@ const HELD: Record<'bottle' | 'coffee', HeldItem> = {
   },
 };
 
-type PoseDef = { arms?: readonly [number, number, Role][]; hop?: number; tall?: boolean; eyes?: EyeMode; held?: keyof typeof HELD };
+type Arm = readonly [number, number, Role];
+type PoseDef = {
+  arms?: readonly Arm[];
+  /** Per-frame arms for a looping pose; overrides `arms`. */
+  frames?: readonly (readonly Arm[])[];
+  hop?: number; tall?: boolean; eyes?: EyeMode; held?: keyof typeof HELD;
+};
 const POSES: Record<KipPose, PoseDef> = {
   rest: {},
   wave: { arms: [[12, 9, 's'], [13, 8, 's']] },
@@ -82,7 +90,26 @@ const POSES: Record<KipPose, PoseDef> = {
   bottle: { held: 'bottle' },
   coffee: { held: 'coffee' },
   stretch: { arms: [[3, 6, 'b'], [3, 5, 'b'], [3, 4, 'b'], [12, 6, 's'], [12, 5, 's'], [12, 4, 's']], tall: true, eyes: 'shut' },
+  // KIP Coach (spec 2026-10-14 §4). Typing: both arms forward and low; each frame drops one arm a row.
+  type: {
+    frames: [
+      [[3, 11, 'b'], [2, 11, 'b'], [12, 11, 's'], [13, 11, 's']],
+      [[3, 12, 'b'], [2, 12, 'b'], [12, 11, 's'], [13, 11, 's']],
+      [[3, 11, 'b'], [2, 11, 'b'], [12, 12, 's'], [13, 12, 's']],
+    ],
+  },
+  // One arm up to the chin.
+  think: { arms: [[12, 11, 's'], [13, 10, 's'], [13, 9, 's'], [12, 8, 's']] },
+  // One arm out to the side at shoulder height.
+  point: { arms: [[3, 8, 'b'], [2, 8, 'b'], [1, 8, 'b']] },
+  // Both arms out and up.
+  shrug: { arms: [[3, 8, 'b'], [2, 7, 'b'], [12, 8, 's'], [13, 7, 's']] },
 };
+
+/** How many loop frames a pose has (§4: `type` alternates its arms over three). */
+export function kipPoseFrames(pose: KipPose): number {
+  return POSES[pose].frames?.length ?? 1;
+}
 
 type MoodDef = { eyes?: EyeMode; tilt?: number; squash?: boolean; tall?: boolean; hop?: number; brows?: boolean };
 const MOODS: Record<KipMood, MoodDef> = {
@@ -143,7 +170,7 @@ function remap(g: RoleGrid, move: (x: number, y: number, c: Role, out: RoleGrid)
 }
 
 /** The 16 x 16 grid of fills (null is empty), row by row. */
-export function kipGrid({ colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'idle' }: KipVariant): KipGrid {
+export function kipGrid({ colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'idle', frame = 0 }: KipVariant): KipGrid {
   const ramp = kipRamp(KIP_COLOURS[colour]);
   const p = POSES[pose];
   const m = MOODS[mood];
@@ -185,7 +212,8 @@ export function kipGrid({ colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'id
     for (let i = 0; i < width; i++) g[15]![8 - width / 2 + i] = 'z';
   }
   // Arms appear only in poses, and only in empty cells.
-  for (const [ax, ay, role] of p.arms ?? []) {
+  const arms = p.frames ? p.frames[Math.abs(Math.floor(frame)) % p.frames.length]! : p.arms ?? [];
+  for (const [ax, ay, role] of arms) {
     const y = ay - hop;
     if (y >= 0 && !g[y]![ax]) g[y]![ax] = role;
   }
@@ -205,6 +233,11 @@ export function kipGrid({ colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'id
     }));
   }
   return out;
+}
+
+/** The sprite mirrored left–right: KIP facing the desk (§4). No back or side view exists. */
+export function mirrorGrid(grid: KipGrid): KipGrid {
+  return grid.map((row) => [...row].reverse());
 }
 
 /** The sprite as one-row runs of one colour, row by row, for react-native-svg Rects. */

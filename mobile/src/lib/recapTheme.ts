@@ -1,19 +1,17 @@
-import { contrast, hexAlpha } from '../components/characters/palette';
-import { characterInfo } from '../components/characters/registry';
-import { mixHex } from '../components/characters/sprites/compose';
-import type { CharacterId } from '../components/characters/types';
+import { contrast, hexAlpha, mixHex } from './colour';
+import { KIP_COLOURS, type KipColour } from './kip/kipArt';
 import type { ChangeTone } from './recapCopy';
 import type { PixelLevel } from './yearPixels';
 import { COLORS } from '../theme';
 
 // The recap share images' colours (recap restyle, owner decision 2026-10-05): every image is
-// tinted by its coach, a dark ground from the registry with the coach's accent on top and a dot
-// pattern of the accent. Pure, so the views and their tests share one source.
+// tinted by your KIP (spec 2026-10-14 KIP Coach §7.7), a dark ground of your KIP's colour with the
+// colour on top and a dot pattern of it. Pure, so the views and their tests share one source.
 
 export interface RecapTint {
   /** The image's background. */
   ground: string;
-  /** The coach's registry accent: dots, sprites' companions, fills. */
+  /** Your KIP's colour: dots, fills. */
   accent: string;
   /** The accent as text (eyebrows, titles, app name): lightened only if it would not read. */
   accentText: string;
@@ -45,8 +43,12 @@ function readable(color: string, ground: string): string {
   return '#FFFFFF';
 }
 
-export function recapTint(coachId: CharacterId): RecapTint {
-  const { accent, ground } = characterInfo(coachId);
+const INK_GROUND = '#0A0B0E';
+
+/** Every recap image is tinted by your KIP (spec 2026-10-14 KIP Coach §7.7): a dark ground of your colour. */
+export function recapTint(colour: KipColour): RecapTint {
+  const accent = KIP_COLOURS[colour];
+  const ground = mixHex(INK_GROUND, accent, 0.16).toUpperCase();
   const text = mixHex('#FFFFFF', accent, 0.06).toUpperCase();
   return {
     ground,
@@ -63,7 +65,7 @@ export function recapTint(coachId: CharacterId): RecapTint {
   };
 }
 
-/** Year in pixels' sleep scale, short → on goal (fixed purple, whatever the coach). */
+/** Year in pixels' sleep scale, short → on goal (fixed purple, whatever your KIP's colour). */
 export const YEAR_SCALE = { short: '#6B4FA8', near: '#9333EA', goal: '#D8B4FE' } as const;
 
 /**
@@ -99,12 +101,12 @@ const MIN_RING_CONTRAST = 3.1;
 
 /**
  * The story ring around the profile avatar (Home, the Profile tab, the Profile screen) and an
- * unwatched shelf circle: the recap coach's accent. On a light page a pale accent (Luna's yellow,
- * Bun's silver) is darkened toward black, keeping its hue, until it stands out at 3:1; on a dark
- * page an accent that is too dark is lightened toward white.
+ * unwatched shelf circle: your KIP's colour. On a light page a pale colour (lemon, snow) is
+ * darkened toward black, keeping its hue, until it stands out at 3:1; on a dark page a colour that
+ * is too dark (ink, slate) is lightened toward white.
  */
-export function storyRingColor(coachId: CharacterId, scheme: 'light' | 'dark'): string {
-  const { accent } = characterInfo(coachId);
+export function storyRingColor(colour: KipColour, scheme: 'light' | 'dark'): string {
+  const accent = KIP_COLOURS[colour];
   const toward = scheme === 'dark' ? '#FFFFFF' : '#000000';
   for (let i = 0; i <= 20; i++) {
     const c = (i === 0 ? accent : mixHex(accent, toward, i * 0.05)).toUpperCase();

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Catalogue · Shelf, desk and desk items</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.tile{position:relative;border-radius:12px;background:rgb(20,22,27);border:1px solid rgb(36,39,46);padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0;box-sizing:border-box}
+.pic{display:flex;align-items:flex-end;justify-content:center;border-radius:8px;background:rgb(14,15,19);padding-bottom:6px;box-sizing:border-box}
+.nm{font-size:13px;font-weight:600;line-height:17px}
+.bd{display:flex;gap:4px;flex-wrap:wrap;min-height:14px}
+.bdg{font-family:'Silkscreen',monospace;font-size:8px;line-height:10px;letter-spacing:1px;padding:1px 4px;border-radius:4px;border:1px solid currentColor}
+.st{font-size:11px;line-height:15px;color:rgb(155,157,166)}
+.stk{font-family:'Silkscreen',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase}
+.lock{position:absolute;right:8px;top:8px}
+.grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1080px; box-sizing: border-box; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+    <h2 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 20px; letter-spacing: 1px">SHELF, DESK &amp; DESK ITEMS</h2>
+    <span class="st" style="font-size: 13px">Small things shown at ×4, desk devices at room scale ×3. Trophies step up with your badge level.</span>
+    <span style="flex: 1"></span>
+    <span class="st" style="font-size: 12px"><span class="bdg" style="color: {{accent}}">TINT</span> <span class="bdg" style="color: #FDE047">GLOW</span> <span class="bdg" style="color: #67E8F9">ANIM</span></span>
+  </div>
+  <sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 10px"><span class="label" style="color: rgb(245,245,244)">slot · {{s.slot}}</span><span class="st">{{s.count}} items · {{s.note}}</span></div>
+      <div class="grid">
+        <sc-for list="{{s.tiles}}" as="t" hint-placeholder-count="8">
+          <div class="tile">
+            <sc-if value="{{t.locked}}" hint-placeholder-val="{{ false }}"><svg class="lock" width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="1" width="6" height="1" fill="#9B9DA6"></rect><rect x="2" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="9" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="1" y="5" width="10" height="6" fill="#9B9DA6"></rect><rect x="5" y="7" width="2" height="2" fill="#14161B"></rect></svg></sc-if>
+            <div class="pic" style="height: {{s.ph}}px"><svg role="img" aria-label="{{t.name}}" width="{{t.pic.w}}" height="{{t.pic.h}}" shape-rendering="crispEdges" style="{{t.dim}}"><sc-for list="{{t.pic.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></div>
+            <div class="nm">{{t.name}}</div>
+            <div class="bd"><sc-for list="{{t.badges}}" as="b" hint-placeholder-count="0"><span class="bdg" style="color: {{b.c}}">{{b.t}}</span></sc-for></div>
+            <div class="st"><span class="stk" style="color: {{t.sc}}">{{t.status}}</span><br>{{t.unlock}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#C4B5FD"]},"$preview":{"width":1280,"height":1080}}'>
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6) }; }
+function pxLayers(rects, u) { var by = {}, order = []; rects.forEach(function (r) { var f = r[4]; if (!by[f]) { by[f] = ""; order.push(f); } by[f] += "M" + r[0] * u + " " + r[1] * u + "h" + r[2] * u + "v" + r[3] * u + "h-" + r[2] * u + "z"; }); return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+var FAM = { SG: "Sleep goal", SB: "Steady bedtime", ST: "Step goal", CI: "Check-in", BR: "Best recovery week", EL: "Every day logged", SM: "Steadiest month" };
+var ROM = ["", "I", "II", "III", "IV", "V"];
+function unl(c) { if (c === "S") return "In every room from day one"; var m = c.match(/^([A-Z]+)(\d+)$/), n = +m[2]; if (m[1] === "ANY") return "Any family · level " + ROM[n]; if (m[1] === "RC") return "Read " + n + " weekly recaps"; if (m[1] === "CB") return "Cheer a buddy " + n + " times"; return FAM[m[1]] + " · " + ROM[n]; }
+function owned(c) { return c === "S" || /^[A-Z]+1$/.test(c) && !/^(RC|CB)/.test(c) || c === "RC4" || c === "CB5"; }
+var BADGE = { T: "TINT", G: "GLOW", A: "ANIM" };
+function res(rects, ramp) { return rects.map(function (q) { var c = q[4]; return [q[0], q[1], q[2], q[3], c.charAt(0) === "@" ? ramp[c.slice(1)] : c]; }); }
+function pic(rects, s, ramp) { var r = res(rects, ramp), x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; r.forEach(function (q) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0] + q[2]); y1 = Math.max(y1, q[1] + q[3]); }); r = r.map(function (q) { return [q[0] - x0, q[1] - y0, q[2], q[3], q[4]]; }); return { w: (x1 - x0) * s, h: (y1 - y0) * s, layers: pxLayers(r, s) }; }
+function tile(it, s, ramp, accent) {
+  var c = it[2], own = owned(c);
+  return {
+    name: it[1], locked: !own, dim: own ? "" : "opacity: .5",
+    pic: pic(it[4], s, ramp),
+    badges: it[3].split("").map(function (k) { return { t: BADGE[k], c: k === "T" ? accent : k === "G" ? "#FDE047" : "#67E8F9" }; }),
+    status: c === "S" ? "Starter" : own ? "Earned" : "Locked", sc: c === "S" ? "rgb(245,245,244)" : own ? "#4ADE80" : "rgb(155,157,166)",
+    unlock: unl(c) + (it[5] ? " · also fits " + it[5] : "")
+  };
+}
+function trophy(a, b, c) { return [[0, 0, 6, 1, b], [0, 1, 6, 3, a], [-1, 1, 1, 2, a], [6, 1, 1, 2, a], [1, 4, 4, 1, c], [2, 5, 2, 2, c], [1, 7, 4, 1, c], [1, 1, 1, 2, b]]; }
+var SHELF = [
+  ["books", "Books", "S", "", [[0, 1, 2, 7, "#60A5FA"], [2, 0, 2, 8, "#F87171"], [4, 2, 2, 6, "#FDE047"], [6, 2, 2, 6, "#A3E635"]]],
+  ["minicactus", "Mini cactus", "S", "", [[1, 6, 5, 3, "#C2410C"], [2, 1, 3, 5, "#65A30D"], [1, 3, 1, 2, "#65A30D"], [5, 2, 1, 2, "#65A30D"], [3, 0, 1, 1, "#F472B6"]]],
+  ["trophyB", "Bronze trophy", "ANY1", "", trophy("#B45309", "#D97706", "#92400E")],
+  ["trophyS", "Silver trophy", "ANY3", "", trophy("#CBD5E1", "#F1F5F9", "#94A3B8")],
+  ["trophyG", "Gold trophy", "ANY5", "G", trophy("#FACC15", "#FDE68A", "#CA8A04")],
+  ["figurine", "Buddy KIP figurine", "CB10", "T", [[0, 7, 7, 1, "#334155"], [1, 1, 5, 6, "@b"], [5, 1, 1, 6, "@s"], [2, 3, 1, 1, "#14161B"], [4, 3, 1, 1, "#14161B"]]],
+  ["globe", "Snow globe", "SM1", "A", [[1, 7, 6, 2, "#7C5A3E"], [2, 0, 4, 1, "#BAE6FD"], [1, 1, 6, 6, "#BAE6FD"], [0, 2, 1, 4, "#BAE6FD"], [7, 2, 1, 4, "#BAE6FD"], [3, 3, 2, 3, "#15803D"], [2, 2, 1, 1, "#F8FAFC"], [5, 1, 1, 1, "#F8FAFC"], [6, 4, 1, 1, "#F8FAFC"]]],
+  ["luckycat", "Lucky cat", "BR2", "A", [[0, -1, 1, 1, "#F8FAFC"], [6, -1, 1, 1, "#F8FAFC"], [0, 0, 7, 4, "#F8FAFC"], [0, 3, 7, 6, "#F8FAFC"], [7, -1, 1, 3, "#F8FAFC"], [2, 2, 1, 1, "#1F2937"], [4, 2, 1, 1, "#1F2937"], [0, 4, 7, 1, "#DC2626"], [3, 5, 1, 1, "#FACC15"], [2, 6, 3, 2, "#FACC15"]]],
+  ["vinyl", "Vinyl stack", "EL3", "", [[2, -1, 8, 8, "#1D4ED8"], [0, 0, 8, 8, "#F59E0B"], [1, 1, 6, 6, "#111827"], [3, 3, 2, 2, "#DC2626"]]],
+  ["kendama", "Kendama", "CI4", "", [[2, 0, 3, 3, "#DC2626"], [3, 1, 1, 1, "#F87171"], [1, 3, 5, 1, "#C08A5A"], [1, 2, 1, 1, "#C08A5A"], [5, 2, 1, 1, "#C08A5A"], [3, 4, 1, 5, "#C08A5A"], [1, 9, 5, 1, "#7C5A3E"]]]
+];
+var DESK = [
+  ["monitor", "Monitor", "S", "G", [[0, 0, 26, 13, "#1F2937"], [1, 1, 24, 11, "#0F1A2A"], [3, 3, 10, 1, "#7DD3FC"], [3, 5, 16, 1, "#7DD3FC"], [3, 7, 8, 1, "#7DD3FC"], [12, 13, 3, 2, "#334155"], [8, 15, 11, 1, "#334155"]]],
+  ["notebook", "Notebook", "S", "", [[0, 0, 22, 4, "#F1F5F9"], [10, 0, 2, 4, "#CBD5E1"], [2, 1, 6, 1, "#94A3B8"], [13, 1, 7, 1, "#94A3B8"], [2, 2, 5, 1, "#94A3B8"], [15, 3, 6, 1, "#FACC15"]]],
+  ["laptop", "Laptop", "ST1", "G", [[2, 0, 16, 10, "#334155"], [3, 1, 14, 8, "#0F1A2A"], [5, 3, 6, 1, "#7DD3FC"], [5, 5, 9, 1, "#7DD3FC"], [0, 10, 20, 2, "#94A3B8"]]],
+  ["dual", "Two screens", "BR4", "G", [[0, 2, 16, 10, "#1F2937"], [1, 3, 14, 8, "#0F1A2A"], [2, 5, 8, 1, "#7DD3FC"], [2, 7, 10, 1, "#7DD3FC"], [7, 12, 2, 3, "#334155"], [18, 0, 18, 12, "#1F2937"], [19, 1, 16, 10, "#140A2A"], [21, 6, 2, 4, "#A78BFA"], [24, 4, 2, 6, "#F0ABFC"], [27, 7, 2, 3, "#A78BFA"], [30, 5, 2, 5, "#F0ABFC"], [26, 12, 3, 3, "#334155"], [4, 15, 28, 1, "#334155"]]],
+  ["crt", "Retro CRT", "SM3", "G", [[0, 0, 20, 15, "#D6D3D1"], [0, 15, 20, 1, "#A8A29E"], [2, 2, 13, 10, "#14532D"], [3, 3, 11, 8, "#166534"], [4, 5, 6, 1, "#86EFAC"], [4, 7, 8, 1, "#86EFAC"], [16, 4, 2, 2, "#57534E"], [16, 8, 2, 2, "#57534E"]]],
+  ["typewriter", "Typewriter", "RC8", "", [[3, 0, 14, 4, "#F8FAFC"], [5, 1, 8, 1, "#94A3B8"], [0, 4, 20, 4, "#1F2937"], [-1, 4, 1, 2, "#94A3B8"], [1, 8, 18, 4, "#111827"], [2, 9, 16, 1, "#6B7280"], [3, 10, 14, 1, "#6B7280"]]],
+  ["tablet", "Drawing tablet", "CI5", "T", [[0, 6, 22, 4, "#1F2937"], [2, 7, 18, 2, "#334155"], [4, 7, 6, 1, "@b"], [9, 8, 4, 1, "@h"], [18, 0, 1, 7, "#E5E7EB"], [18, 0, 1, 1, "#111827"]]]
+];
+var ITEMS = [
+  ["mug", "Mug", "S", "T", [[0, 0, 4, 5, "@b"], [0, 0, 4, 1, "@h"], [4, 1, 1, 3, "@s"], [0, 4, 4, 1, "@s"]]],
+  ["sticky", "Sticky notes", "S", "", [[0, 2, 6, 6, "#FDE047"], [2, 0, 6, 6, "#F9A8D4"], [3, 2, 4, 1, "#BE185D"], [3, 4, 3, 1, "#BE185D"]]],
+  ["bottle", "Water bottle", "SG1", "", [[1, 0, 2, 1, "#F43F5E"], [0, 1, 4, 8, "#BAE6FD"], [0, 4, 4, 3, "#7DD3FC"], [1, 2, 1, 5, "#F0F9FF"]]],
+  ["pills", "Pill organiser", "EL1", "", [[0, 2, 12, 4, "#E5E7EB"], [0, 1, 2, 1, "#F87171"], [2, 1, 2, 1, "#FB923C"], [4, 1, 2, 1, "#FDE047"], [6, 1, 2, 1, "#4ADE80"], [8, 1, 2, 1, "#60A5FA"], [10, 1, 2, 1, "#A78BFA"], [2, 2, 1, 4, "#CBD5E1"], [5, 2, 1, 4, "#CBD5E1"], [8, 2, 1, 4, "#CBD5E1"]]],
+  ["shaker", "Protein shaker", "ST2", "", [[0, 0, 5, 2, "#111827"], [0, 2, 5, 8, "#E5E7EB"], [0, 6, 5, 4, "#C4B5FD"], [1, 3, 3, 1, "#94A3B8"]]],
+  ["can", "Energy can · “ZAP”", "EL4", "", [[0, 0, 4, 1, "#CBD5E1"], [0, 1, 4, 6, "#16A34A"], [0, 3, 4, 1, "#111827"], [1, 2, 1, 1, "#FDE047"], [2, 3, 1, 1, "#FDE047"], [1, 4, 2, 1, "#FDE047"], [0, 7, 4, 1, "#CBD5E1"]], "shelf"],
+  ["matcha", "Matcha bowl", "SB4", "A", [[3, -1, 1, 1, "#E5E7EB"], [4, 0, 1, 1, "#E5E7EB"], [0, 2, 8, 1, "#65A30D"], [0, 3, 8, 2, "#57534E"], [1, 5, 6, 1, "#44403C"], [2, 6, 4, 1, "#44403C"], [9, 1, 1, 5, "#D6D3D1"], [8, 5, 3, 1, "#A8A29E"]]],
+  ["alarm", "Alarm clock", "SG4", "A", [[0, 0, 2, 1, "#DC2626"], [5, 0, 2, 1, "#DC2626"], [0, 1, 7, 6, "#DC2626"], [1, 2, 5, 4, "#F8FAFC"], [3, 3, 1, 2, "#111827"], [3, 4, 2, 1, "#111827"], [0, 7, 1, 1, "#991B1B"], [6, 7, 1, 1, "#991B1B"]]],
+  ["duck", "Rubber duck", "CB15", "", [[0, 3, 7, 4, "#FACC15"], [3, 0, 4, 4, "#FACC15"], [7, 2, 2, 1, "#F97316"], [5, 1, 1, 1, "#111827"], [1, 4, 3, 1, "#EAB308"]]],
+  ["stand", "Headphones stand", "EL2", "T", [[0, 0, 6, 1, "#1F2937"], [-1, 1, 1, 1, "#1F2937"], [6, 1, 1, 1, "#1F2937"], [-1, 2, 2, 3, "@b"], [5, 2, 2, 3, "@b"], [2, 1, 1, 8, "#334155"], [0, 9, 5, 1, "#334155"]]],
+  ["controller", "Game controller", "ANY2", "", [[1, 1, 10, 4, "#374151"], [0, 2, 1, 4, "#374151"], [11, 2, 1, 4, "#374151"], [2, 2, 1, 3, "#E5E7EB"], [1, 3, 3, 1, "#E5E7EB"], [8, 2, 1, 1, "#F472B6"], [9, 3, 1, 1, "#60A5FA"], [7, 3, 1, 1, "#4ADE80"]]],
+  ["deskglobe", "Desk globe", "SM4", "A", [[1, 0, 6, 7, "#1D4ED8"], [0, 2, 1, 3, "#1D4ED8"], [2, 1, 2, 2, "#4ADE80"], [4, 4, 2, 2, "#4ADE80"], [7, 1, 1, 6, "#CA8A04"], [3, 7, 2, 1, "#7C5A3E"], [2, 8, 4, 1, "#7C5A3E"]]]
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    var col = this.props.kipColor ?? "#FB7185", ramp = kRamp(col);
+    function m(list, s) { return list.map(function (it) { return tile(it, s, ramp, col); }); }
+    return {
+      accent: col,
+      sections: [
+        { slot: "shelf", count: SHELF.length, note: "one trinket on the wall shelf · ×4", ph: 54, tiles: m(SHELF, 4) },
+        { slot: "desk", count: DESK.length, note: "the device KIP works at · ×3", ph: 60, tiles: m(DESK, 3) },
+        { slot: "desk_item", count: ITEMS.length, note: "small item beside the device · ×4", ph: 54, tiles: m(ITEMS, 4) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

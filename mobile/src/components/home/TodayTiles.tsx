@@ -1,7 +1,6 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import type { DailyScoreDTO, ScoreBandsDTO } from '../../api/scores';
 import type { SleepNight } from '../../api/sleep';
@@ -10,9 +9,11 @@ import { forecastRange, ICON, isShortNight, todayWeather, type SceneKey } from '
 import { HOME_COPY } from '../../lib/homeCopy';
 import { formatMinutes, VERDICT } from '../../lib/recoveryCopy';
 import { scoreBand } from '../../lib/scoreInsights';
+import type { KipMood } from '../../lib/kip/kipArt';
 import type { CoachEntryRoute } from '../../lib/useCoachStatus';
 import type { ForecastState } from '../../lib/useForecast';
 import { COLORS } from '../../theme';
+import { KipHead } from '../kip/KipHead';
 import { WeatherIcon } from '../recovery/WeatherIcon';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -189,18 +190,20 @@ export function TodayTiles({ recovery, bands, sleepScore, night, tomorrow, bedti
   );
 }
 
-export function AskCoachButton({ route, onPress }: { route: CoachEntryRoute | null; onPress: () => void }) {
-  const { colors } = useTones();
+// Home's Ask KIP: KIP's head (your colour, the day's mood) leads the button.
+export function AskKipButton({ route, mood, onPress }: { route: CoachEntryRoute | null; mood: KipMood; onPress: () => void }) {
   if (!route) return null;
+  const needsConsent = route === 'CoachConsent';
   return (
     <Button
       testID="coach-entry-button"
       variant="outline"
       className="h-[44px] w-full justify-start px-[14px]"
-      iconStart={<Ionicons name="chatbubble-outline" size={18} color={colors.coach} />}
+      iconStart={<KipHead testID="ask-kip-home-head" mood={mood} />}
+      accessibilityLabel={C.askKipLabel(needsConsent)}
       onPress={onPress}
     >
-      {C.askCoach(route === 'CoachConsent')}
+      {C.askKip(needsConsent)}
     </Button>
   );
 }

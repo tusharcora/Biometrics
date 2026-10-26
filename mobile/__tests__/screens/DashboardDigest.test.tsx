@@ -117,7 +117,7 @@ describe('DashboardScreen: weekly digest card', () => {
     expect(shelf).toBeLessThan(digestCard);
   });
 
-  it('orders Home F: scene, Today, tiles, Ask Coach, habit log, Recaps, digest, metrics', async () => {
+  it('orders Home F: scene, Today, tiles, Ask KIP, habit log, Recaps, digest, metrics', async () => {
     const { findByTestId, toJSON } = render(<DashboardScreen />);
     await findByTestId('coach-digest-card');
     const tree = JSON.stringify(toJSON());

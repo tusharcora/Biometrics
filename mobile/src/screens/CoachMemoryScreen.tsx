@@ -17,8 +17,10 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup } from '../components/ui/settings-list';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
+import { KipHead } from '../components/kip/KipHead';
+import { useMyKipColour } from '../lib/kip/myKipColour';
+import { KIP_COPY } from '../lib/kipCopy';
 import { MemoryEditForm } from '../components/memory-edit-form';
 import { COLORS } from '../theme';
 import { withAlpha } from '../lib/utils';
@@ -139,13 +141,13 @@ function MemoryRow({ entry, icon, onChange, onRemove }: MemoryRowProps) {
   );
 }
 
-// Settings -> Coach Memory: everything the coach remembers about the user,
-// editable or deletable at any time (spec 6).
+// Settings -> What KIP remembers: everything KIP remembers about the user,
+// editable or deletable at any time (spec 6; KIP Coach §7.4).
 export function CoachMemoryScreen() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [entries, setEntries] = useState<MemoryDTO[]>([]);
   const [attempt, setAttempt] = useState(0);
-  const focused = useScreenFocused();
+  const mine = useMyKipColour();
 
   useEffect(() => {
     let cancelled = false;
@@ -190,8 +192,8 @@ export function CoachMemoryScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID="coach-memory-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
-          <Character testID="coach-memory-character" mood="idle" size={48} paused={!focused} />
-          <Text className="text-center text-muted-foreground">The AI Coach is not available right now.</Text>
+          <Kip testID="coach-memory-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+          <Text className="text-center text-muted-foreground">{KIP_COPY.unavailable}</Text>
         </View>
       </SafeAreaView>
     );
@@ -201,9 +203,9 @@ export function CoachMemoryScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <Character testID="coach-memory-character" mood="idle" size={48} paused={!focused} />
+          <Kip testID="coach-memory-kip" colour={mine} pose="wave" mood="curious" scale={3} />
           <Text testID="coach-memory-error" className="text-center text-muted-foreground">
-            Your coach memory could not be loaded.
+            {KIP_COPY.memoryLoadError}
           </Text>
           <Button testID="coach-memory-retry" variant="secondary" onPress={() => setAttempt((n) => n + 1)}>
             Try again
@@ -220,27 +222,30 @@ export function CoachMemoryScreen() {
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
         {groups.length === 0 ? (
           <Card testID="coach-memory-empty" className="items-start gap-3 p-5">
-            <Character testID="coach-memory-character" mood="idle" size={40} glow paused={!focused} />
+            <Kip testID="coach-memory-kip" colour={mine} pose="wave" mood="curious" scale={3} />
             <Text className="text-heading">Nothing remembered yet</Text>
-            <Text className="text-caption text-muted-foreground">
-              The coach only remembers your training goals, your schedule and your preferences, and never health or medical details.
-              Anything it remembers will appear here, and you can change or delete it at any time.
-            </Text>
+            <Text className="text-caption text-muted-foreground">{KIP_COPY.memoryEmptyBody}</Text>
           </Card>
         ) : (
-          groups.map((group) => (
-            <SettingsGroup key={group.key} label={group.label}>
-              {group.entries.map((entry) => (
-                <MemoryRow
-                  key={entry.id}
-                  entry={entry}
-                  icon={CATEGORY_ICONS[group.key] ?? 'bookmark-outline'}
-                  onChange={replace}
-                  onRemove={remove}
-                />
-              ))}
-            </SettingsGroup>
-          ))
+          <>
+            <View className="flex-row items-start gap-3 px-1">
+              <KipHead testID="coach-memory-intro-kip" />
+              <Text className="flex-1 text-caption text-muted-foreground">{KIP_COPY.memoryIntro}</Text>
+            </View>
+            {groups.map((group) => (
+              <SettingsGroup key={group.key} label={group.label}>
+                {group.entries.map((entry) => (
+                  <MemoryRow
+                    key={entry.id}
+                    entry={entry}
+                    icon={CATEGORY_ICONS[group.key] ?? 'bookmark-outline'}
+                    onChange={replace}
+                    onRemove={remove}
+                  />
+                ))}
+              </SettingsGroup>
+            ))}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>

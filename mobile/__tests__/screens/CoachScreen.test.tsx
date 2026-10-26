@@ -1,6 +1,7 @@
+import { ask, deferred, mockNav, openChat, status, stream, today } from '../../jest-mocks/coachScreenHarness';
 import React from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet } from 'react-native';
-import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
 import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
@@ -19,71 +20,14 @@ import {
   type MemoryDTO,
   type TodaySummaryDTO,
 } from '../../src/api/coach';
-import { streamCoachMessage } from '../../src/api/coachStream';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
-import { withCharacter } from '../../jest-mocks/characterContext';
-import type { ThinkingTextId } from '../../src/components/characters/thinking';
+import { KIP_COPY } from '../../src/lib/kipCopy';
 import { GENERAL_QUESTIONS, suggestedQuestions } from '../../src/lib/coachToday';
 import { followUpsFor } from '../../src/lib/coachAnswers';
-import { DIALOG_INK, DIALOG_TEXT_CLASS } from '../../src/components/coach/thinking/Dialog';
-import { FONTS } from '../../src/theme';
 
-jest.mock('../../src/api/coach', () => ({
-  ...jest.requireActual('../../src/api/coach'),
-  fetchCoachStatus: jest.fn(),
-  fetchLatestConversation: jest.fn(),
-  fetchTodaySummary: jest.fn(),
-  fetchConversation: jest.fn(),
-  listConversations: jest.fn(),
-  deleteCoachMemory: jest.fn(),
-}));
-jest.mock('../../src/api/coachStream', () => ({
-  ...jest.requireActual('../../src/api/coachStream'),
-  streamCoachMessage: jest.fn(),
-}));
-jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
-
-const mockNavigate = jest.fn();
-const mockSetParams = jest.fn();
-let mockFocusListener: (() => void) | undefined;
-let mockParams: unknown;
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({
-    navigate: mockNavigate,
-    setParams: mockSetParams,
-    goBack: jest.fn(),
-    addListener: (_event: string, cb: () => void) => {
-      mockFocusListener = cb;
-      return () => {
-        mockFocusListener = undefined;
-      };
-    },
-  }),
-  useRoute: () => ({ params: mockParams }),
-}));
-
-const stream = streamCoachMessage as jest.Mock;
-
-const status: CoachStatusDTO = {
-  enabled: true,
-  consented: true,
-  consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'kit',
-  personaChosen: true,
-  personas: [],
-};
-
-const today: TodaySummaryDTO = {
-  date: '2026-09-30',
-  hasData: true,
-  sentence: { text: "Recovery's 26, about half your usual.", spans: [{ text: "Recovery's " }, { text: '26', metric: 'recovery' }, { text: ', about half your usual.' }], source: 'template' },
-  bars: [
-    { metric: 'recovery', label: 'Recovery', value: 26, usual: 58, unit: 'score', display: '26', usualDisplay: '58', status: 'below', scaleMax: 100 },
-    { metric: 'sleep', label: 'Sleep', value: 408, usual: 433, unit: 'minutes', display: '6h 48m', usualDisplay: '7h 13m', status: 'near', scaleMax: 606 },
-    { metric: 'hrv', label: 'HRV', value: 41, usual: 52, unit: 'ms', display: '41', usualDisplay: '52', status: 'below', scaleMax: 72.8 },
-    { metric: 'rhr', label: 'Rest HR', value: 58, usual: 58, unit: 'bpm', display: '58', usualDisplay: '58', status: 'near', scaleMax: 81.2 },
-  ],
-};
+// The mocks, `status`, `today` and the helpers live in jest-mocks/coachScreenHarness (shared with KipPage.test).
+const mockNavigate = mockNav.navigate;
+const mockSetParams = mockNav.setParams;
 
 const CARD = {
   headline: 'Decent night, broken after 4am',
@@ -95,47 +39,10 @@ const SLEEP_FOLLOW_UP = followUpsFor(CARD, 'How did I sleep?')[0]!;
 const PROPOSAL: MemoryDTO = { id: 'm1', category: 'SCHEDULE', value: 'Trains at 6am', status: 'PENDING', createdAt: '2026-09-20T00:00:00.000Z' };
 const SAFETY = { type: 'safety' as const, text: "I'm really sorry you're feeling this way.", resources: ['Call or text 988 (US)', 'Text HOME to 741741'] };
 
-function deferred<T>() {
-  let resolve!: (v: T) => void;
-  let reject!: (e: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-async function openChat(thinkingText?: ThinkingTextId) {
-  // No CharacterProvider by default (Mochi, the steps thinking text).
-  const utils = render(thinkingText ? withCharacter(<CoachScreen />, { thinkingText }) : <CoachScreen />);
-  await utils.findByTestId('coach-input');
-  return utils;
-}
-
-async function ask(utils: ReturnType<typeof render>, text: string) {
-  fireEvent.changeText(utils.getByTestId('coach-input'), text);
-  await act(async () => {
-    fireEvent.press(utils.getByTestId('coach-send-button'));
-  });
-}
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  stream.mockReset();
-  mockParams = undefined;
-  mockFocusListener = undefined;
-  (useKeyboardVisible as jest.Mock).mockReturnValue(false);
-  (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
-  (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
-  (fetchTodaySummary as jest.Mock).mockResolvedValue(today);
-  (listConversations as jest.Mock).mockResolvedValue([]);
-  (deleteCoachMemory as jest.Mock).mockResolvedValue(undefined);
-});
-
 describe('CoachScreen: gating', () => {
   it('sends a not-yet-consented user to the consent screen, keeping the prefill', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
-    mockParams = { prefill: 'Why did my score change today?' };
+    mockNav.params = { prefill: 'Why did my score change today?' };
     render(<CoachScreen />);
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: 'Why did my score change today?' }));
@@ -149,10 +56,10 @@ describe('CoachScreen: gating', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
 
-    expect(await findByTestId('coach-needs-consent')).toBeTruthy();
+    expect(await findByTestId('kip-consent')).toBeTruthy();
     // No bounce: returning without agreeing does not navigate to consent again.
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(queryByTestId('coach-input')).toBeNull();
@@ -168,7 +75,7 @@ describe('CoachScreen: gating', () => {
 
     (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
 
     expect(await findByTestId('coach-input')).toBeTruthy();
@@ -180,7 +87,7 @@ describe('CoachScreen: gating', () => {
     const { findByTestId } = render(<CoachScreen />);
 
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
     await act(async () => {
       first.resolve({ ...status, consented: false });
@@ -198,7 +105,7 @@ describe('CoachScreen: gating', () => {
     await utils.findByTestId('coach-safety-resources');
 
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
 
     expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
@@ -216,7 +123,7 @@ describe('CoachScreen: gating', () => {
     expect(utils.queryByText('Earlier answer')).toBeNull();
 
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
 
     expect(await utils.findByText('Earlier answer')).toBeTruthy();
@@ -232,7 +139,7 @@ describe('CoachScreen: gating', () => {
     await ask(utils, 'Hello');
 
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
 
     expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
@@ -242,30 +149,30 @@ describe('CoachScreen: gating', () => {
   });
 
   it('consumes a prefill param once applied, and fills the input again when the same text re-arrives', async () => {
-    mockParams = { prefill: 'Why did my score change today?' };
+    mockNav.params = { prefill: 'Why did my score change today?' };
     const utils = await openChat();
     expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
     expect(mockSetParams).toHaveBeenCalledWith({ prefill: undefined });
     expect(stream).not.toHaveBeenCalled();
 
     fireEvent.changeText(utils.getByTestId('coach-input'), '');
-    mockParams = undefined;
+    mockNav.params = undefined;
     utils.rerender(<CoachScreen />);
-    mockParams = { prefill: 'Why did my score change today?' };
+    mockNav.params = { prefill: 'Why did my score change today?' };
     utils.rerender(<CoachScreen />);
     expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
   });
 
   it('still carries the prefill to the consent screen from the review card after the param was consumed', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
-    mockParams = { prefill: 'Why did my score change today?' };
+    mockNav.params = { prefill: 'Why did my score change today?' };
     const utils = render(<CoachScreen />);
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
-    mockParams = undefined;
+    mockNav.params = undefined;
     utils.rerender(<CoachScreen />);
 
     await act(async () => {
-      mockFocusListener?.();
+      mockNav.focus();
     });
     fireEvent.press(await utils.findByTestId('coach-review-consent-button'));
 
@@ -276,7 +183,7 @@ describe('CoachScreen: gating', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
     const { findByTestId, queryByTestId } = render(<CoachScreen />);
 
-    await findByTestId('coach-unavailable');
+    expect(await findByTestId('kip-unavailable')).toHaveTextContent("KIP isn't available right now.");
     expect(queryByTestId('coach-input')).toBeNull();
     expect(fetchLatestConversation).not.toHaveBeenCalled();
   });
@@ -285,7 +192,7 @@ describe('CoachScreen: gating', () => {
     (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(new Error('offline'));
     const utils = render(<CoachScreen />);
 
-    expect(await utils.findByTestId('coach-status-unverified')).toBeTruthy();
+    expect(await utils.findByTestId('coach-status-unverified')).toHaveTextContent(KIP_COPY.statusUnverified);
     expect(utils.getByTestId('coach-input')).toBeTruthy();
     expect(utils.queryByTestId('coach-conversations-button')).toBeNull();
     expect(utils.queryByTestId('coach-new-chat-button')).toBeNull();
@@ -412,10 +319,12 @@ describe('CoachScreen: today and suggestions', () => {
 
     expect(await utils.findByTestId('coach-today-sentence')).toHaveTextContent("Recovery's 26, about half your usual.");
     expect(utils.getAllByTestId('coach-today-footnote')).toHaveLength(1);
-    expect(utils.getByTestId('coach-empty')).toHaveTextContent(/What would you like to know\?/);
+    expect(utils.getByTestId('coach-empty')).toHaveTextContent(/Hi, I'm KIP\. What would you like to know\?/);
+    expect(utils.getByText('Ask about your sleep, recovery or training, or anything health and fitness.')).toBeTruthy();
     expect(utils.getByTestId('coach-suggestion-0')).toHaveTextContent(/^Why is my recovery lower than usual today\?/);
     expect(utils.getByTestId('coach-suggestion-1')).toHaveTextContent(/^Why is my HRV lower than usual today\?/);
-    suggestedQuestions(today).forEach((question, i) => expect(utils.getByTestId(`coach-suggestion-${i}`)).toHaveTextContent(question, { exact: false }));
+    expect(utils.getAllByTestId(/^coach-suggestion-/)).toHaveLength(3);
+    suggestedQuestions(today).slice(0, 3).forEach((question, i) => expect(utils.getByTestId(`coach-suggestion-${i}`)).toHaveTextContent(question, { exact: false }));
   });
 
   it('asks about a bar when it is tapped, and a suggestion sends as-is leaving the field alone', async () => {
@@ -447,10 +356,10 @@ describe('CoachScreen: today and suggestions', () => {
     expect(utils.getByTestId('coach-suggestion-0')).toHaveTextContent(GENERAL_QUESTIONS[0]!, { exact: false });
   });
 
-  it("names the character in the composer's placeholder", async () => {
+  it("asks KIP in the composer's placeholder", async () => {
     const utils = await openChat();
 
-    expect(utils.getByTestId('coach-input').props.placeholder).toBe('Ask Mochi anything…');
+    expect(utils.getByTestId('coach-input').props.placeholder).toBe('Ask KIP…');
   });
 });
 
@@ -462,8 +371,8 @@ describe('CoachScreen: streamed answers', () => {
 
     expect(utils.getByText('How did I sleep?')).toBeTruthy();
     expect(utils.getByTestId('coach-input').props.value).toBe('');
-    // Steps (the default) shows a personality line until the first status arrives.
-    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Mochi is mulling it over/);
+    // Steps (the default) shows KIP's line until the first status arrives.
+    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/KIP is typing it up/);
     await live.emit({ type: 'status', label: 'Looking at your sleep…' });
     expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Looking at your sleep…/);
     expect(utils.getByTestId('thinking-step-status-active')).toBeTruthy();
@@ -630,7 +539,7 @@ describe('CoachScreen: streamed answers', () => {
     const utils = await openChat('lines');
     await ask(utils, 'How did I sleep?');
 
-    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Mochi is mulling it over/);
+    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/KIP is typing it up/);
     await live.emit({ type: 'status', step: 'route', label: 'Looking at your sleep…' });
     // Lines ignores step labels (spec §5).
     expect(utils.getByTestId('coach-thinking')).not.toHaveTextContent(/Looking at your sleep/);
@@ -676,37 +585,15 @@ describe('CoachScreen: streamed answers', () => {
     expect(utils.queryByTestId('coach-thinking')).toBeNull();
   });
 
-  it('with the dialog thinking text, the streaming answer types into the same box, then reads as a normal message', async () => {
-    const live = openTurn(stream);
-    const utils = await openChat('dialog');
-    await ask(utils, 'How did I sleep?');
-
-    // The box with Mochi's name tab; its line types in from the first letter.
-    expect(utils.getByTestId('thinking-dialog-tab')).toHaveTextContent('Mochi');
-    await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
-
-    expect(utils.queryByTestId('coach-thinking')).toBeNull();
-    expect(utils.getByTestId('reply-frame-dialog')).toHaveTextContent(/Mostly clear skies\./);
-    // The answer keeps the box's pixel text and light ink, not the row's Geist body.
-    const streamed = within(utils.getByTestId('reply-frame-dialog')).getByText(/Mostly clear skies\./);
-    expect(String(streamed.props.className).split(' ')).toEqual(expect.arrayContaining(DIALOG_TEXT_CLASS.split(' ')));
-    expect(StyleSheet.flatten(streamed.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.pixel, color: DIALOG_INK }));
-    expect(utils.queryByTestId('chat-bubble-assistant')).toBeNull();
-
-    await live.finish(doneEvent());
-    expect(utils.queryByTestId('reply-frame-dialog')).toBeNull();
-    expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Mostly clear skies.');
-  });
-
-  it('with the placeholder thinking text, the streaming answer flows into the bubble', async () => {
+  it('with the placeholder thinking text, the streaming answer is a normal reply bubble', async () => {
     const live = openTurn(stream);
     const utils = await openChat('placeholder');
     await ask(utils, 'How did I sleep?');
     await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
 
-    expect(utils.getByTestId('reply-frame-placeholder')).toHaveTextContent(/Mochi.*Mostly clear skies\./);
+    expect(utils.queryByTestId('coach-thinking')).toBeNull();
+    expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Mostly clear skies.');
     await live.finish(doneEvent());
-    expect(utils.queryByTestId('reply-frame-placeholder')).toBeNull();
   });
 
   it('announces a finished answer once, but not a safety reply', async () => {
@@ -729,7 +616,7 @@ describe('CoachScreen: streamed answers', () => {
     const utils = await openChat();
 
     const headers = utils.getAllByRole('header').map((h) => h.props.accessibilityLabel ?? h.props.children);
-    expect(headers).toEqual(expect.arrayContaining(['Coach', 'What would you like to know?']));
+    expect(headers).toEqual(expect.arrayContaining(['KIP', "Hi, I'm KIP. What would you like to know?"]));
   });
 
   it('does not allow sending an empty message', async () => {
@@ -946,7 +833,7 @@ describe('CoachScreen: errors and retry', () => {
     const utils = await openChat();
     await ask(utils, 'Hello');
 
-    expect(await utils.findByTestId('coach-unavailable')).toBeTruthy();
+    expect(await utils.findByTestId('kip-unavailable')).toHaveTextContent("KIP isn't available right now.");
   });
 });
 

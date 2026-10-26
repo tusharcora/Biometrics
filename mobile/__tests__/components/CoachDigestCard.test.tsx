@@ -1,6 +1,7 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { Rect } from 'react-native-svg';
+import { kipHeadRects } from '../../src/components/kip/KipHead';
 import { CoachDigestCard } from '../../src/components/coach-digest-card';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest } from '../../src/api/coach';
 import { fetchRecaps } from '../../src/api/recaps';
@@ -30,11 +31,15 @@ describe('CoachDigestCard', () => {
     await findByTestId('coach-digest-card');
   });
 
-  it('shows the latest digest text with its date', async () => {
-    const { findByTestId, getByTestId } = render(<CoachDigestCard />);
+  it("is KIP's note: the latest digest text with its date, and a way to read it all", async () => {
+    const { findByTestId, getByTestId, getByText } = render(<CoachDigestCard />);
 
     expect(await findByTestId('coach-digest-preview')).toHaveTextContent(/Your recovery held steady/);
-    expect(getByTestId('coach-digest-date')).toHaveTextContent(/Sep 20/);
+    expect(getByText("KIP's note")).toBeTruthy();
+    expect(getByTestId('coach-digest-date')).toHaveTextContent('· Sun, Sep 20');
+    // Spoken without the middle dot.
+    expect(getByTestId('coach-digest-date').props.accessibilityLabel).toBe('Sun, Sep 20');
+    expect(getByText('Read it all →')).toBeTruthy();
   });
 
   it('opens the full text when tapped, and closes again', async () => {
@@ -44,6 +49,7 @@ describe('CoachDigestCard', () => {
     fireEvent.press(await findByTestId('coach-digest-card'));
 
     expect(getByTestId('coach-digest-full')).toHaveTextContent(digest.text);
+    expect(getByTestId('coach-digest-title')).toHaveTextContent("KIP's note");
     // The server no longer appends the disclaimer to the recap; it is shown once, under it.
     expect(getByTestId('coach-digest-footnote')).toHaveTextContent('Comparisons against your own readings, not medical advice.');
     fireEvent.press(getByTestId('coach-digest-close'));
@@ -82,7 +88,7 @@ describe('CoachDigestCard', () => {
   it("opens the week's recap instead of the sheet when the digest is that recap's story", async () => {
     (fetchRecaps as jest.Mock).mockResolvedValue([{ id: 'd1', kind: 'WEEK' }]);
     const onOpenRecap = jest.fn();
-    const { findByTestId, queryByTestId } = render(withCharacter(<CoachDigestCard onOpenRecap={onOpenRecap} />));
+    const { findByTestId, queryByTestId } = render(<CoachDigestCard onOpenRecap={onOpenRecap} />);
     await waitFor(() => expect(fetchRecaps).toHaveBeenCalledWith({ kind: 'WEEK', limit: 1 }));
     fireEvent.press(await findByTestId('coach-digest-card'));
     await waitFor(() => expect(onOpenRecap).toHaveBeenCalledWith('d1'));
@@ -90,18 +96,21 @@ describe('CoachDigestCard', () => {
   });
 });
 
-describe('CoachDigestCard character', () => {
-  it("shows the user's character on the recap, idle", async () => {
-    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'jelly' }));
+describe("CoachDigestCard KIP's head", () => {
+  const fills = (utils: ReturnType<typeof render>) =>
+    within(utils.getByTestId('coach-digest-kip', { includeHiddenElements: true })).UNSAFE_getAllByType(Rect).map((r) => r.props.fill);
+
+  it('is idle by default', async () => {
+    const utils = render(<CoachDigestCard />);
     await utils.findByTestId('coach-digest-card');
 
-    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:jelly:idle:18:playing:none');
+    expect(fills(utils)).toEqual(kipHeadRects({ mood: 'idle' }).map((r) => r.fill));
   });
 
-  it('rests on a poor recovery day', async () => {
-    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'jelly', recoveryBand: 'scorePoor' }));
+  it("wears the day's mood", async () => {
+    const utils = render(<CoachDigestCard mood="sleepy" />);
     await utils.findByTestId('coach-digest-card');
 
-    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:jelly:resting:18:playing:none');
+    expect(fills(utils)).toEqual(kipHeadRects({ mood: 'sleepy' }).map((r) => r.fill));
   });
 });

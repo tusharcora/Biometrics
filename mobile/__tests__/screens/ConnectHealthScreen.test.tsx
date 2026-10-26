@@ -1,5 +1,6 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { ConnectHealthScreen } from '../../src/screens/ConnectHealthScreen';
@@ -142,10 +143,13 @@ describe('ConnectHealthScreen', () => {
   });
 });
 
-describe('ConnectHealthScreen: character', () => {
-  it("shows the user's character", () => {
-    const utils = render(withCharacter(<ConnectHealthScreen />, { characterId: 'kit' }));
+describe('ConnectHealthScreen: KIP', () => {
+  afterEach(() => resetMyKipColour());
 
-    expect(characterLabel(utils, 'connect-health-character')).toBe('character:kit:idle:72:playing:none');
+  it('shows your KIP waving, in your colour', () => {
+    setMyKipColour('lime');
+    const utils = render(<ConnectHealthScreen />);
+
+    expect(kipFills(utils, 'connect-health-kip')).toEqual(kipArtFills({ colour: 'lime', pose: 'wave', mood: 'idle' }));
   });
 });

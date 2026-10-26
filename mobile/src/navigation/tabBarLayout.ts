@@ -4,19 +4,19 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 export const TAB_ORDER = ['Home', 'Activity', 'Coach', 'Social', 'Profile'] as const;
 export type TabName = (typeof TAB_ORDER)[number];
 
-// The centre slot holds the coach character instead of an icon.
+// The centre slot holds your KIP instead of an icon.
 export const HUB_TAB: TabName = 'Coach';
 
 export const TAB_LABELS: Record<string, string> = {
   Home: 'Home',
   Activity: 'Activity',
-  Coach: 'AI coach',
+  Coach: 'KIP',
   Social: 'Social',
   Profile: 'Profile',
 };
 
 // The quiet rounded rectangle: low enough to stay out of the way, tall enough
-// for a 22 dp icon over its label and the 52 dp hub character.
+// for a 22 dp icon over its label and the 32 dp hub KIP.
 export const FLOATING_BAR_HEIGHT = 62;
 export const FLOATING_BAR_RADIUS = 18;
 export const FLOATING_BAR_MARGIN = 12;

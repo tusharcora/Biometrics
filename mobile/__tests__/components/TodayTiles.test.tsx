@@ -1,9 +1,11 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { Rect } from 'react-native-svg';
 import type { DailyScoreDTO } from '../../src/api/scores';
 import type { SleepNight } from '../../src/api/sleep';
-import { AskCoachButton, TodayHeader, TodayTiles, type Read } from '../../src/components/home/TodayTiles';
+import { AskKipButton, TodayHeader, TodayTiles, type Read } from '../../src/components/home/TodayTiles';
+import { kipHeadRects } from '../../src/components/kip/KipHead';
 import { READY } from '../../jest-mocks/forecastFixture';
 import { COLORS } from '../../src/theme';
 
@@ -149,16 +151,23 @@ describe('TodayHeader', () => {
   });
 });
 
-describe('AskCoachButton', () => {
+describe('AskKipButton', () => {
   it('is hidden without a route, and words the consent case', () => {
-    const { rerender } = render(<AskCoachButton route={null} onPress={jest.fn()} />);
+    const { rerender } = render(<AskKipButton route={null} mood="idle" onPress={jest.fn()} />);
     expect(screen.queryByTestId('coach-entry-button')).toBeNull();
     const onPress = jest.fn();
-    rerender(<AskCoachButton route="CoachConsent" onPress={onPress} />);
-    expect(screen.getByText('Ask Coach · see what’s shared first')).toBeTruthy();
-    rerender(<AskCoachButton route="Coach" onPress={onPress} />);
-    expect(screen.getByText('Ask Coach about today')).toBeTruthy();
+    rerender(<AskKipButton route="CoachConsent" mood="idle" onPress={onPress} />);
+    expect(screen.getByText('Ask KIP · see what’s shared first')).toBeTruthy();
+    expect(screen.getByTestId('coach-entry-button').props.accessibilityLabel).toBe('Ask KIP, see what’s shared first');
+    rerender(<AskKipButton route="Coach" mood="idle" onPress={onPress} />);
+    expect(screen.getByText('Ask KIP about today')).toBeTruthy();
     fireEvent.press(screen.getByTestId('coach-entry-button'));
     expect(onPress).toHaveBeenCalled();
+  });
+
+  it("leads with KIP's head in the day's mood", () => {
+    render(<AskKipButton route="Coach" mood="proud" onPress={jest.fn()} />);
+    const head = screen.getByTestId('ask-kip-home-head', { includeHiddenElements: true });
+    expect(within(head).UNSAFE_getAllByType(Rect).map((r) => r.props.fill)).toEqual(kipHeadRects({ mood: 'proud' }).map((r) => r.fill));
   });
 });

@@ -23,15 +23,14 @@ const input = (over: Partial<HubInput> = {}): HubInput => ({
   health: { connected: true, lastSyncedAt: '2026-10-13T10:00:00Z' },
   buddiesAvailable: true,
   chatsAvailable: true,
-  coach: { name: 'Sage', style: 'Lightbulb', text: 'Personality lines' },
-  aiCoach: { enabled: true, consented: true },
+  kip: { thinking: 'Steps', consented: true },
   now: NOW,
   kipColour: 'coral',
   ...over,
 });
 
 describe('categoryCards', () => {
-  it('builds all nine cards in board order with their status lines', () => {
+  it('builds all eight cards in board order with their status lines', () => {
     expect(categoryCards(input())).toEqual([
       { category: 'kipColour', status: 'Coral' },
       { category: 'health', status: 'Google Health · synced 12 min ago' },
@@ -39,15 +38,14 @@ describe('categoryCards', () => {
       { category: 'notifications', status: '4 of 6 on' },
       { category: 'buddies', status: '@tushar · sharing 3 of 5' },
       { category: 'chats', status: 'Read receipts on · status off' },
-      { category: 'coach', status: 'Sage · Lightbulb · Personality lines' },
-      { category: 'aiCoach', status: 'On · Coach Memory' },
+      { category: 'kip', status: 'Coral · Steps · coaching on' },
       { category: 'signIn', status: 'Apple, Google · 2 devices' },
     ]);
   });
 
   it('leaves out what this server or device lacks, and counts only the switches that show', () => {
-    const cards = categoryCards(input({ buddiesAvailable: false, chatsAvailable: false, aiCoach: { enabled: false, consented: false } }));
-    expect(cards.map((c) => c.category)).toEqual(['kipColour', 'health', 'timezone', 'notifications', 'coach', 'signIn']);
+    const cards = categoryCards(input({ buddiesAvailable: false, chatsAvailable: false, kip: { thinking: 'Steps', consented: null } }));
+    expect(cards.map((c) => c.category)).toEqual(['kipColour', 'health', 'timezone', 'notifications', 'kip', 'signIn']);
     expect(cards.find((c) => c.category === 'notifications')?.status).toBe('1 of 1 on');
     expect(categoryCards(input({ reads: { ...reads, pushAvailable: false } })).map((c) => c.category)).not.toContain('notifications');
   });
@@ -55,6 +53,12 @@ describe('categoryCards', () => {
   it('puts the KIP colour card first, with the colour name', () => {
     const cards = categoryCards(input({ kipColour: 'sky' }));
     expect(cards[0]).toEqual({ category: 'kipColour', status: 'Sky' });
+  });
+
+  it('always shows the one KIP card: colour, thinking text, and coaching on or off while the coach is enabled', () => {
+    const kip = (over: Partial<HubInput>) => categoryCards(input(over)).find((c) => c.category === 'kip')?.status;
+    expect(kip({ kipColour: 'cobalt', kip: { thinking: 'Typewriter', consented: false } })).toBe('Cobalt · Typewriter · coaching off');
+    expect(kip({ kip: { thinking: 'Steps', consented: null } })).toBe('Coral · Steps');
   });
 
   it('shows a card with its title alone when its status could not be read', () => {
